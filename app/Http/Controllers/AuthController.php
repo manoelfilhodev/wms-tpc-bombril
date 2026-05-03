@@ -13,9 +13,12 @@ class AuthController extends Controller
 {
     public function showLoginForm(Request $request)
     {
-        $deviceId = $request->cookie(DeviceAuthorizationService::COOKIE_NAME)
-            ?: $request->cookie(DeviceAuthorizationService::LEGACY_COOKIE_NAME)
-            ?: (string) str()->uuid();
+        $deviceId = $request->cookie(DeviceAuthorizationService::COOKIE_NAME);
+
+        if (! $deviceId) {
+            $deviceId = (string) str()->uuid();
+        }
+
         $deviceRegistered = app(DeviceAuthorizationService::class)
             ->isActiveDeviceRegistered($deviceId, 'web');
 
@@ -32,7 +35,7 @@ class AuthController extends Controller
                 60 * 24 * 365,
                 '/',
                 null,
-                app()->environment('production'),
+                false,
                 false,
                 false,
                 'lax'
@@ -50,7 +53,7 @@ class AuthController extends Controller
         if (! Auth::attempt($credentials)) {
             $usuario = User::where('email', $credentials['email'])->first();
 
-            if ($usuario?->id_user && $usuario->unidade_id) {
+            if ($usuario && $usuario->id_user && $usuario->unidade_id) {
                 $this->insertUserLog(
                     (int) $usuario->id_user,
                     (int) $usuario->unidade_id,
@@ -115,29 +118,6 @@ class AuthController extends Controller
         return redirect()->away($this->microsoftLogoutUrl());
     }
 
-    /**
-     * Login da API e emissao de token Sanctum
-     *
-     * @group Auth
-     * @unauthenticated
-     *
-     * @bodyParam email string required Email do usuario. Example: usuario@empresa.com
-     * @bodyParam password string required Senha do usuario. Example: Secret123!
-     *
-     * @response 200 {
-     *   "token": "1|xxxxxxxxxxxxxxxx",
-     *   "user": {
-     *     "id": 1,
-     *     "nome": "Nome do Usuario",
-     *     "tipo": "admin",
-     *     "unidade": 1,
-     *     "nivel": 1
-     *   }
-     * }
-     * @response 401 {
-     *   "message": "Credenciais invalidas"
-     * }
-     */
     public function apiLogin(Request $request)
     {
         $credentials = $request->only('email', 'password');
@@ -149,7 +129,7 @@ class AuthController extends Controller
         $user = User::where('email', $credentials['email'])->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
-            if ($user?->id_user && $user->unidade_id) {
+            if ($user && $user->id_user && $user->unidade_id) {
                 $this->insertUserLog(
                     (int) $user->id_user,
                     (int) $user->unidade_id,

@@ -30,6 +30,7 @@ class MicrosoftController extends Controller
             ?: (string) str()->uuid();
 
         return Socialite::driver('graph')
+            ->stateless()
             ->scopes(['openid', 'profile', 'email'])
             ->with([
                 'prompt' => 'select_account',
@@ -55,7 +56,17 @@ class MicrosoftController extends Controller
                 return redirect()->route('login')->with('error', 'Login Microsoft ainda nao configurado para o tenant Systex.');
             }
 
-            $microsoftUser = Socialite::driver('graph')->user();
+            if (! $request->has('code')) {
+                Log::warning('login_microsoft - callback_sem_code', [
+                    'error' => $request->query('error'),
+                    'error_description' => $request->query('error_description'),
+                    'ip' => $request->ip(),
+                ]);
+
+                return redirect()->route('login')->with('error', 'Sessao de login Microsoft expirada. Tente novamente pela tela inicial.');
+            }
+
+            $microsoftUser = Socialite::driver('graph')->stateless()->user();
 
             $email = $microsoftUser->getEmail();
             $name = $microsoftUser->getName() ?: 'Usuario Microsoft';
@@ -175,6 +186,17 @@ class MicrosoftController extends Controller
 
             $deviceId = $request->cookie(DeviceAuthorizationService::COOKIE_NAME)
                 ?: $request->cookie(DeviceAuthorizationService::LEGACY_COOKIE_NAME);
+                
+                Log::warning('debug_dispositivo_login_microsoft', [
+                    'usuario_id' => $user->id_user,
+                    'email' => $email,
+                    'tipo_usuario' => $user->tipo,
+                    'nivel_usuario' => $user->nivel,
+                    'device_id_cookie' => $deviceId,
+                    'cookie_novo' => $request->cookie(DeviceAuthorizationService::COOKIE_NAME),
+                    'cookie_legado' => $request->cookie(DeviceAuthorizationService::LEGACY_COOKIE_NAME),
+                    'todos_cookies' => $request->cookies->all(),
+                ]);
 
             if ($this->deviceAuthorization->requiresDeviceValidation($user)) {
                 $device = $this->deviceAuthorization->findAuthorizedDevice($user, $deviceId, 'web');
