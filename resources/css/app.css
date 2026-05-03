@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.side-nav .side-nav-item > a[aria-expanded="true"] {
+    background-color: #2d2f33;
+    font-weight: bold;
+}
+
+.side-nav-second-level {
+    background-color: #1f1f1f;
+    padding-left: 20px;
+}
+
+.side-nav-second-level li a {
+    color: #ccc;
+}
+
+.side-nav-second-level li a:hover {
+    color: #fff;
+}
+
+.badge-status {
+    color: #fff !important;
+    font-weight: 500;
+}
+
+.badge-gerar { background-color: #6c757d !important; }   /* cinza escuro */
+.badge-separar { background-color: #0dcaf0 !important; } /* azul claro */
+.badge-separando { background-color: #0d6efd !important; } /* azul */
+.badge-conferir { background-color: #ffc107 !important; }  /* amarelo */
+.badge-conferindo { background-color: #0d6efd !important; }
+.badge-conferido { background-color: #198754 !important; } /* verde */
+.badge-carregar { background-color: #ffc107 !important; }
+.badge-carregando { background-color: #0d6efd !important; }
+.badge-carregado { background-color: #198754 !important; }
+.badge-faturando { background-color: #dc3545 !important; } /* vermelho */
+.badge-liberado { background-color: #20c997 !important; }  /* verde água */
+

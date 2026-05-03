@@ -1,0 +1,28 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('_tb_demanda_distribuicoes', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->unsignedBigInteger('demanda_id');
+            $table->string('separador_nome', 150);
+            $table->unsignedInteger('quantidade_pecas');
+            $table->timestamps();
+
+            $table->foreign('demanda_id')->references('id')->on('_tb_demanda')->onDelete('cascade');
+            $table->index(['demanda_id', 'created_at']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('_tb_demanda_distribuicoes');
+    }
+};
+
