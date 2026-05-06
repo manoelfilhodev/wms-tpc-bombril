@@ -114,8 +114,7 @@
                                     janela operacional.</small>
                             </div>
                             <span class="badge bg-light text-dark border">
-                                Separado:
-                                {{ number_format($dadosGraficos['projecaoProdutividade']['produzido'] ?? 0, 0, ',', '.') }}
+                                Separado: <span id="badgeSeparadoMeta">0</span>
                             </span>
                         </div>
                     </button>
@@ -149,7 +148,8 @@
                             <div class="col-xl-6">
                                 <div class="card border-0 shadow-sm h-100">
                                     <div class="card-body">
-                                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                                        <div
+                                            class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                                             <h6 class="mb-0">Separação por hora x operador</h6>
                                             <span class="badge bg-light text-dark border">Total:
                                                 {{ number_format($dadosGraficos['separacaoHoraOperador']['total'] ?? 0, 0, ',', '.') }}</span>
@@ -487,8 +487,26 @@
         }
 
         const projecao = dadosGraficos.projecaoProdutividade || {};
-        const labelsProjecao = (projecao.curvaIdeal || []).map((item) => item.hora);
-        const valoresReaisProjecao = (projecao.apontamentos || []).map((item) => item.acumulado);
+        const horaInicioMeta = 12;
+
+        function filtrarJanelaMeta(items) {
+            return (items || []).filter((item) => {
+                const hora = parseInt(String(item.hora || '00:00').split(':')[0], 10);
+                return hora >= horaInicioMeta;
+            });
+        }
+
+        // 🔥 AQUI ESTÁ A CORREÇÃO
+        const curvaIdealMeta = filtrarJanelaMeta(projecao.curvaIdeal);
+        const apontamentosMeta = filtrarJanelaMeta(projecao.apontamentos);
+        const projecaoCorrigidaMeta = filtrarJanelaMeta(projecao.projecaoCorrigida);
+
+        const labelsProjecao = curvaIdealMeta.map((item) => item.hora);
+        const valoresReaisProjecao = apontamentosMeta.map((item) => item.acumulado);
+
+        document.querySelectorAll('.badgeSeparadoMeta').forEach((el) => {
+            el.innerText = formatCaixas(produzidoMeta);
+        });
 
         renderChart('chartProjecaoProdutividade', {
             type: 'line',
@@ -508,7 +526,7 @@
                     },
                     {
                         label: 'Curva ideal',
-                        data: (projecao.curvaIdeal || []).map((item) => item.valor),
+                        data: curvaIdealMeta.map((item) => item.valor),
                         yAxisID: 'y',
                         borderColor: chartColors.ideal,
                         borderDash: [6, 4],
@@ -519,7 +537,7 @@
                     },
                     {
                         label: 'Projeção corrigida',
-                        data: (projecao.projecaoCorrigida || []).map((item) => item.valor),
+                        data: projecaoCorrigidaMeta.map((item) => item.valor),
                         yAxisID: 'y',
                         borderColor: chartColors.projection,
                         borderDash: [10, 5],
@@ -798,8 +816,7 @@
             type: 'bar',
             data: {
                 labels: dadosGraficos.stretchPorHora.labels,
-                datasets: [
-                    {
+                datasets: [{
                         type: 'bar',
                         label: 'Apontamentos',
                         data: dadosGraficos.stretchPorHora.values,
