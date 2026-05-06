@@ -309,8 +309,24 @@ class DemandaController extends Controller
         $resumoPorDt = [];
         $itensImportados = 0;
         $itensIgnoradosBloqueio = 0;
+        $dtsIgnoradasDuplicidade = [];
 
-        DB::transaction(function () use ($linhas, $mapa, &$resumoPorDt, &$itensImportados, &$itensIgnoradosBloqueio) {
+        $dtsDaPlanilha = collect($linhas)
+            ->skip(1)
+            ->map(function ($linha) use ($mapa) {
+                $colunas = preg_split("/\t+/", trim($linha));
+                return trim($colunas[$mapa['transporte']] ?? '');
+            })
+            ->filter()
+            ->unique()
+            ->values();
+
+        $dtsExistentes = Demanda::query()
+            ->whereIn('fo', $dtsDaPlanilha)
+            ->pluck('fo')
+            ->all();
+
+        DB::transaction(function () use ($linhas, $mapa, $dtsExistentes, &$resumoPorDt, &$itensImportados, &$itensIgnoradosBloqueio, &$dtsIgnoradasDuplicidade) {
             foreach ($linhas as $index => $linha) {
                 if ($index === 0 || trim($linha) === '') {
                     continue;
@@ -321,6 +337,11 @@ class DemandaController extends Controller
                 $skuOriginal = trim($colunas[$mapa['material']] ?? '');
 
                 if ($dt === '' || $skuOriginal === '') {
+                    continue;
+                }
+
+                if (in_array($dt, $dtsExistentes, true)) {
+                    $dtsIgnoradasDuplicidade[$dt] = true;
                     continue;
                 }
 
@@ -335,21 +356,18 @@ class DemandaController extends Controller
                 $temSobra = $sobra > 0;
 
                 if (!isset($resumoPorDt[$dt])) {
-                    $demanda = Demanda::updateOrCreate(
-                        ['fo' => $dt],
-                        [
-                            'cliente' => $colunas[$mapa['nome']] ?? null,
-                            'transportadora' => $colunas[$mapa['transportadora']] ?? null,
-                            'tipo' => 'EXPEDICAO',
-                            'status' => 'A_SEPARAR',
-                            'hora_agendada' => null,
-                            'total_itens' => 0,
-                            'total_itens_com_sobra' => 0,
-                            'possui_sobra' => false,
-                        ]
-                    );
+                    $demanda = Demanda::create([
+                        'fo' => $dt,
+                        'cliente' => $colunas[$mapa['nome']] ?? null,
+                        'transportadora' => $colunas[$mapa['transportadora']] ?? null,
+                        'tipo' => 'EXPEDICAO',
+                        'status' => 'A_SEPARAR',
+                        'hora_agendada' => null,
+                        'total_itens' => 0,
+                        'total_itens_com_sobra' => 0,
+                        'possui_sobra' => false,
+                    ]);
 
-                    DemandaItem::where('demanda_id', $demanda->id)->delete();
                     $resumoPorDt[$dt] = ['demanda_id' => $demanda->id, 'total' => 0, 'com_sobra' => 0];
                 }
 
@@ -379,9 +397,25 @@ class DemandaController extends Controller
         });
 
         $dtsComSobra = collect($resumoPorDt)->filter(fn($r) => $r['com_sobra'] > 0)->count();
+        $totalDtsDuplicadas = count($dtsIgnoradasDuplicidade);
+        $dtsDuplicadasTexto = collect(array_keys($dtsIgnoradasDuplicidade))
+            ->sort()
+            ->take(8)
+            ->implode(', ');
+        $sufixoDuplicidade = $totalDtsDuplicadas > 0
+            ? " DTs ignoradas por já existirem: {$totalDtsDuplicadas}" . ($dtsDuplicadasTexto ? " ({$dtsDuplicadasTexto}" . ($totalDtsDuplicadas > 8 ? ', ...' : '') . ")." : '.')
+            : '';
+
+        if ($itensImportados === 0 && $totalDtsDuplicadas > 0) {
+            return back()->with(
+                'error',
+                "Importação bloqueada. As DTs da planilha já existem no sistema e não foram sobrescritas.{$sufixoDuplicidade}"
+            );
+        }
+
         return back()->with(
             'success',
-            "Importação concluída. Itens válidos: {$itensImportados}. Itens bloqueados: {$itensIgnoradosBloqueio}. DTs com sobra: {$dtsComSobra}."
+            "Importação concluída. Itens válidos: {$itensImportados}. Itens bloqueados: {$itensIgnoradosBloqueio}. DTs com sobra: {$dtsComSobra}.{$sufixoDuplicidade}"
         );
     }
 
@@ -449,6 +483,55 @@ class DemandaController extends Controller
         ]);
 
         return back()->with('success', "Stage da DT {$demanda->fo} atualizado.");
+    }
+
+    public function updateStagesMultiple(Request $request)
+    {
+        $dados = $request->validate([
+            'stages' => 'required|array',
+            'stages.*' => 'nullable|string|max:100',
+        ]);
+
+        if (!Schema::hasColumn('_tb_demanda', 'stage')) {
+            return back()->with('error', 'A coluna Stage ainda não existe no banco. Execute as migrations antes de atualizar.');
+        }
+
+        $ids = collect(array_keys($dados['stages']))
+            ->filter(fn($id) => is_numeric($id))
+            ->map(fn($id) => (int) $id)
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return back()->with('error', 'Nenhuma DT foi enviada para atualização de box.');
+        }
+
+        $demandas = Demanda::query()
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy('id');
+
+        $atualizadas = 0;
+
+        DB::transaction(function () use ($dados, $demandas, &$atualizadas) {
+            foreach ($dados['stages'] as $id => $stage) {
+                $demanda = $demandas->get((int) $id);
+                if (!$demanda) {
+                    continue;
+                }
+
+                $novoStage = trim((string) $stage);
+                $novoStage = $novoStage !== '' ? $novoStage : null;
+
+                if ($demanda->stage === $novoStage) {
+                    continue;
+                }
+
+                $demanda->update(['stage' => $novoStage]);
+                $atualizadas++;
+            }
+        });
+
+        return back()->with('success', "{$atualizadas} box(es) atualizado(s).");
     }
 
     public function distribuirDt(Request $request, $id)

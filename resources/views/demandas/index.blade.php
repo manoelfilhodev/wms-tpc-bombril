@@ -216,9 +216,16 @@
         <!-- Card da Tabela (padrão gestão de estoque) -->
         <div class="card shadow-sm border-0">
             <div class="card-body p-0">
-                <form action="{{ route('demandas.updateMultiple') }}" method="POST">
+                <form action="{{ route('demandas.updateStagesMultiple') }}" method="POST">
                     @csrf
                     @method('PATCH')
+                    <input type="hidden" name="stage" id="singleStageValue">
+                    <div class="d-flex justify-content-end align-items-center gap-2 px-4 py-3 border-bottom bg-white">
+                        <span class="small text-muted">Altere um ou mais boxes e salve tudo junto.</span>
+                        <button type="submit" class="btn btn-sm btn-primary">
+                            <i class="mdi mdi-content-save-all-outline me-1"></i> Salvar boxes
+                        </button>
+                    </div>
 
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
@@ -231,7 +238,7 @@
                                         <i class="mdi mdi-pound me-1"></i> DT
                                     </th>
                                     <th class="px-4 py-3 text-muted small fw-semibold">
-                                        <i class="mdi mdi-map-marker-outline me-1"></i> Stage
+                                        <i class="mdi mdi-map-marker-outline me-1"></i> Box
                                     </th>
                                     @if (empty($modoOperacional))
                                         <th class="px-4 py-3 text-muted small fw-semibold">
@@ -305,12 +312,15 @@
                                         </td>
                                         <td class="px-4 py-3" style="min-width:220px;">
                                             <div class="input-group input-group-sm">
-                                                <input type="text" name="stage" form="stageForm{{ $d->id }}"
-                                                    class="form-control" value="{{ $d->stage }}" maxlength="100"
-                                                    placeholder="Stage" aria-label="Stage da DT {{ $d->fo }}">
-                                                <button type="submit" form="stageForm{{ $d->id }}"
-                                                    class="btn btn-outline-primary" data-bs-toggle="tooltip"
-                                                    title="Salvar Stage">
+                                                <input type="text" id="stageInput{{ $d->id }}"
+                                                    name="stages[{{ $d->id }}]" class="form-control"
+                                                    value="{{ $d->stage }}" maxlength="100" placeholder="Box"
+                                                    aria-label="Box da DT {{ $d->fo }}">
+                                                <button type="submit"
+                                                    formaction="{{ route('demandas.updateStage', $d->id) }}"
+                                                    class="btn btn-outline-primary btn-save-stage-row"
+                                                    data-stage-input="stageInput{{ $d->id }}"
+                                                    data-bs-toggle="tooltip" title="Salvar somente este box">
                                                     <i class="mdi mdi-content-save-outline"></i>
                                                 </button>
                                             </div>
@@ -374,13 +384,6 @@
                         </table>
                     </div>
                 </form>
-                @foreach ($demandas as $d)
-                    <form id="stageForm{{ $d->id }}" action="{{ route('demandas.updateStage', $d->id) }}"
-                        method="POST" class="d-none">
-                        @csrf
-                        @method('PATCH')
-                    </form>
-                @endforeach
             </div>
 
             @if ($demandas->hasPages())
@@ -655,6 +658,17 @@
                     input.checked = false;
                 });
             }
+        });
+
+        document.querySelectorAll('.btn-save-stage-row').forEach(function(button) {
+            button.addEventListener('click', function() {
+                const input = document.getElementById(button.dataset.stageInput);
+                const singleStageValue = document.getElementById('singleStageValue');
+
+                if (input && singleStageValue) {
+                    singleStageValue.value = input.value;
+                }
+            });
         });
     </script>
 
