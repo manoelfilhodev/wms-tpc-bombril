@@ -238,6 +238,9 @@
                                         <i class="mdi mdi-pound me-1"></i> DT
                                     </th>
                                     <th class="px-4 py-3 text-muted small fw-semibold">
+                                        <i class="mdi mdi-calendar-month-outline me-1"></i> Data DT
+                                    </th>
+                                    <th class="px-4 py-3 text-muted small fw-semibold">
                                         <i class="mdi mdi-map-marker-outline me-1"></i> Box
                                     </th>
                                     @if (empty($modoOperacional))
@@ -309,6 +312,9 @@
                                         <td class="px-4 py-3 fw-semibold">
                                             <a href="#" data-bs-toggle="modal"
                                                 data-bs-target="#modalDistribuicao{{ $d->id }}">{{ $d->fo }}</a>
+                                        </td>
+                                        <td class="px-4 py-3 text-nowrap">
+                                            {{ $d->created_at ? \Carbon\Carbon::parse($d->created_at)->format('d/m/Y') : '-' }}
                                         </td>
                                         <td class="px-4 py-3" style="min-width:220px;">
                                             <div class="input-group input-group-sm">
