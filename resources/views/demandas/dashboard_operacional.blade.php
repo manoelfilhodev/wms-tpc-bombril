@@ -60,6 +60,8 @@
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-body"><small class="text-muted">A separar</small>
                         <h3 class="mb-0">{{ $status['pendente'] }}</h3>
+                        <small class="text-muted d-block mt-2">Backlog:
+                            {{ number_format($status['pendente_backlog'] ?? 0, 0, ',', '.') }}</small>
                     </div>
                 </div>
             </div>
@@ -68,14 +70,8 @@
                     <div class="card-body">
                         <small class="text-muted">Separando</small>
                         <h3 class="mb-0">{{ $status['em_separacao'] }}</h3>
-                        @if ($separandoOutrasDatas->isNotEmpty())
-                            <small class="text-muted d-block mt-2">
-                                @foreach ($separandoOutrasDatas as $grupo)
-                                    Data de criação {{ $grupo['data'] }}: {{ $grupo['total'] }} em
-                                    andamento{{ !$loop->last ? ' | ' : '' }}
-                                @endforeach
-                            </small>
-                        @endif
+                        <small class="text-muted d-block mt-2">Backlog:
+                            {{ number_format($status['em_separacao_backlog'] ?? 0, 0, ',', '.') }}</small>
                     </div>
                 </div>
             </div>
@@ -83,6 +79,8 @@
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-body"><small class="text-muted">Separado parcial</small>
                         <h3 class="mb-0">{{ $status['finalizado_parcial'] }}</h3>
+                        <small class="text-muted d-block mt-2">Backlog finalizado:
+                            {{ number_format($status['finalizado_parcial_backlog'] ?? 0, 0, ',', '.') }}</small>
                     </div>
                 </div>
             </div>
@@ -90,6 +88,8 @@
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-body"><small class="text-muted">Separado completo</small>
                         <h3 class="mb-0">{{ $status['finalizado_completo'] }}</h3>
+                        <small class="text-muted d-block mt-2">Backlog finalizado:
+                            {{ number_format($status['finalizado_completo_backlog'] ?? 0, 0, ',', '.') }}</small>
                     </div>
                 </div>
             </div>

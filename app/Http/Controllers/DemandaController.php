@@ -811,12 +811,49 @@ class DemandaController extends Controller
         $base = $this->aplicarFiltrosOperacionais($base, $turno, $data);
         $separandoOutrasDatas = $this->getSeparandoDeOutrasDatas($turno, $data);
         $resumoOperacional = $this->getResumoOperacionalPorPeriodo($data, $data);
+        if ($turno) {
+            [$inicioPeriodoStatus, $fimPeriodoStatus] = $this->intervaloTurno($data, $turno);
+        } else {
+            $inicioPeriodoStatus = Carbon::parse($data)->startOfDay();
+            $fimPeriodoStatus = Carbon::parse($data)->endOfDay();
+        }
+
+        $demandasPeriodo = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereBetween('created_at', [$inicioPeriodoStatus, $fimPeriodoStatus]);
+        $demandasBacklog = Demanda::query()
+            ->where('possui_sobra', true)
+            ->where('created_at', '<', $inicioPeriodoStatus);
 
         $status = [
-            'pendente' => (clone $base)->whereNull('separacao_iniciada_em')->count(),
-            'em_separacao' => (clone $base)->whereNotNull('separacao_iniciada_em')->whereNull('separacao_finalizada_em')->count(),
-            'finalizado_parcial' => (clone $base)->where('separacao_resultado', 'PARCIAL')->count(),
-            'finalizado_completo' => (clone $base)->where('separacao_resultado', 'COMPLETA')->count(),
+            'pendente' => (clone $demandasPeriodo)->whereNull('separacao_iniciada_em')->count(),
+            'pendente_backlog' => (clone $demandasBacklog)->whereNull('separacao_iniciada_em')->count(),
+            'em_separacao' => (clone $demandasPeriodo)
+                ->whereNotNull('separacao_iniciada_em')
+                ->whereNull('separacao_finalizada_em')
+                ->count(),
+            'em_separacao_backlog' => (clone $demandasBacklog)
+                ->whereNotNull('separacao_iniciada_em')
+                ->whereNull('separacao_finalizada_em')
+                ->count(),
+            'finalizado_parcial' => Demanda::query()
+                ->where('possui_sobra', true)
+                ->where('separacao_resultado', 'PARCIAL')
+                ->whereBetween('separacao_finalizada_em', [$inicioPeriodoStatus, $fimPeriodoStatus])
+                ->count(),
+            'finalizado_parcial_backlog' => (clone $demandasBacklog)
+                ->where('separacao_resultado', 'PARCIAL')
+                ->whereBetween('separacao_finalizada_em', [$inicioPeriodoStatus, $fimPeriodoStatus])
+                ->count(),
+            'finalizado_completo' => Demanda::query()
+                ->where('possui_sobra', true)
+                ->where('separacao_resultado', 'COMPLETA')
+                ->whereBetween('separacao_finalizada_em', [$inicioPeriodoStatus, $fimPeriodoStatus])
+                ->count(),
+            'finalizado_completo_backlog' => (clone $demandasBacklog)
+                ->where('separacao_resultado', 'COMPLETA')
+                ->whereBetween('separacao_finalizada_em', [$inicioPeriodoStatus, $fimPeriodoStatus])
+                ->count(),
         ];
 
         $tempoDiffExpr = $this->tempoDiffMinExpr('separacao_iniciada_em', 'separacao_finalizada_em');
