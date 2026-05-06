@@ -64,10 +64,36 @@
 
     <div class="report-wrap">
         <div class="shift-report" id="shiftReport">
-            <div class="report-greeting">{{ $mensagem }}</div>
+            <div class="report-topline">
+                <div class="report-greeting">{{ $mensagem }}</div>
+                <div class="report-period">{{ $inicioTurno->format('H:i') }} - {{ $fimTurno->format('H:i') }}</div>
+            </div>
 
-            <div class="report-title">{{ mb_strtoupper($turnoAtual['label']) }}</div>
-            <div class="report-date">{{ \Carbon\Carbon::parse($dataSelecionada)->format('d/m/Y') }}</div>
+            <div class="report-head">
+                <div>
+                    <div class="report-eyebrow">Report de produtividade</div>
+                    <div class="report-title">{{ mb_strtoupper($turnoAtual['label']) }}</div>
+                </div>
+                <div class="report-date">{{ \Carbon\Carbon::parse($dataSelecionada)->format('d/m/Y') }}</div>
+            </div>
+
+            <div class="status-summary">
+                <div class="status-card">
+                    <span>A separar</span>
+                    <strong>{{ number_format($resumoStatus['a_separar'], 0, ',', '.') }}</strong>
+                    <small>Backlog: {{ number_format($resumoStatus['backlog_a_separar'], 0, ',', '.') }}</small>
+                </div>
+                <div class="status-card">
+                    <span>Separando</span>
+                    <strong>{{ number_format($resumoStatus['separando'], 0, ',', '.') }}</strong>
+                    <small>Backlog: {{ number_format($resumoStatus['backlog_separando'], 0, ',', '.') }}</small>
+                </div>
+                <div class="status-card">
+                    <span>Separado</span>
+                    <strong>{{ number_format($resumoStatus['separado'], 0, ',', '.') }}</strong>
+                    <small>Backlog finalizado: {{ number_format($resumoStatus['backlog_separado'], 0, ',', '.') }}</small>
+                </div>
+            </div>
 
             <table class="report-table">
                 <thead>
@@ -100,10 +126,14 @@
             </table>
 
             <div class="report-kpi">
-                <div class="kpi-label">BOX</div>
-                <div class="kpi-value">{{ number_format($totais['box'], 0, ',', '.') }}</div>
-                <div class="kpi-label">DT</div>
-                <div class="kpi-value">{{ number_format($totais['dt'], 0, ',', '.') }}</div>
+                <div class="kpi-card">
+                    <div class="kpi-label">BOX</div>
+                    <div class="kpi-value">{{ number_format($totais['box'], 0, ',', '.') }}</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">DT</div>
+                    <div class="kpi-value">{{ number_format($totais['dt'], 0, ',', '.') }}</div>
+                </div>
             </div>
         </div>
     </div>
@@ -130,56 +160,131 @@
     }
 
     .shift-report {
-        width: min(560px, 100%);
-        background: #d8d8d8;
-        color: #050505;
-        border: 1px solid #222;
+        width: min(620px, 100%);
+        background: #f8fafc;
+        color: #111827;
+        border: 1px solid #111827;
+        border-radius: 6px;
+        overflow: hidden;
         font-family: Arial, Helvetica, sans-serif;
-        font-weight: 800;
-        font-style: italic;
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+        box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18);
+    }
+
+    .report-topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        background: #ffffff;
+        border-bottom: 1px solid #d1d5db;
+        padding: 10px 14px;
     }
 
     .report-greeting {
-        background: #f3f3f3;
-        color: #111;
+        color: #111827;
         font-size: 18px;
-        padding: 5px 10px;
-        font-weight: 700;
+        font-weight: 800;
         font-style: italic;
     }
 
+    .report-period {
+        color: #475569;
+        font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .report-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        background: #0f172a;
+        color: #fff;
+        padding: 16px 18px;
+    }
+
+    .report-eyebrow {
+        color: #cbd5e1;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
     .report-title {
-        background: #050505;
-        color: #ff1010;
-        text-align: center;
-        font-size: 24px;
-        line-height: 1.35;
-        padding: 5px 8px;
+        color: #f43f5e;
+        font-size: 27px;
+        line-height: 1.1;
+        font-weight: 900;
+        margin-top: 4px;
     }
 
     .report-date {
-        background: #a7aaa5;
-        color: #111;
+        color: #fff;
+        text-align: right;
+        font-size: 28px;
+        line-height: 1;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+    .status-summary {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        background: #cbd5e1;
+        border-bottom: 1px solid #cbd5e1;
+    }
+
+    .status-card {
+        background: #f8fafc;
+        padding: 10px 12px;
         text-align: center;
-        font-size: 30px;
-        line-height: 1.2;
-        padding: 6px 8px;
+    }
+
+    .status-card span {
+        display: block;
+        color: #475569;
+        font-size: 13px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+    }
+
+    .status-card strong {
+        display: block;
+        color: #111827;
+        font-size: 26px;
+        line-height: 1;
+        margin-top: 4px;
+        font-weight: 900;
+    }
+
+    .status-card small {
+        display: block;
+        color: #64748b;
+        font-size: 11px;
+        line-height: 1;
+        margin-top: 6px;
+        font-weight: 800;
     }
 
     .report-table {
         width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        font-size: 21px;
+        font-size: 19px;
     }
 
     .report-table th {
-        background: #050505;
-        color: #ff1010;
+        background: #111827;
+        color: #f43f5e;
         text-align: center;
-        padding: 5px 8px;
-        border: 1px solid #202020;
+        padding: 9px 10px;
+        border: 1px solid #1f2937;
+        font-size: 20px;
+        font-weight: 900;
     }
 
     .report-table th:first-child,
@@ -198,46 +303,64 @@
     }
 
     .report-table td {
-        background: #c8c8c8;
-        border: 1px solid #505050;
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
         text-align: center;
-        padding: 3px 8px;
-        line-height: 1.08;
+        padding: 9px 10px;
+        line-height: 1.1;
+        font-weight: 800;
+    }
+
+    .report-table tbody tr:nth-child(even) td {
+        background: #eef2f7;
     }
 
     .report-table tfoot td {
-        background: #050505;
-        color: #ff1010;
-        font-size: 30px;
-        padding: 7px 8px;
+        background: #0f172a;
+        color: #f43f5e;
+        font-size: 29px;
+        padding: 10px;
+        font-weight: 900;
     }
 
     .empty-row {
-        height: 72px;
-        color: #555;
+        height: 78px;
+        color: #64748b;
         font-size: 18px;
+        font-style: italic;
     }
 
     .report-kpi {
-        margin: 44px 2px 0;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        padding: 16px;
+        background: #e5e7eb;
+    }
+
+    .kpi-card {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
         text-align: center;
-        font-size: 20px;
+        overflow: hidden;
     }
 
     .kpi-label {
-        background: #b9bdc5;
-        color: #2a2a2a;
-        border-top: 1px solid #4b5563;
-        border-bottom: 1px solid #4b5563;
-        padding: 3px 8px;
-        line-height: 1.1;
+        background: #f1f5f9;
+        color: #475569;
+        border-bottom: 1px solid #cbd5e1;
+        padding: 7px 8px;
+        line-height: 1;
+        font-size: 16px;
+        font-weight: 900;
     }
 
     .kpi-value {
-        background: #050505;
-        color: #ff1010;
-        font-size: 31px;
-        padding: 3px 8px;
+        color: #f43f5e;
+        font-size: 34px;
+        font-weight: 900;
+        padding: 8px;
         line-height: 1.15;
     }
 
@@ -271,8 +394,9 @@
         }
 
         .shift-report {
-            width: 560px;
+            width: 620px;
             box-shadow: none;
+            border-radius: 0;
         }
     }
 </style>

@@ -3,7 +3,10 @@
 @section('content')
 @php
     $dataFormatada = $dados['data'] ? \Carbon\Carbon::parse($dados['data'])->format('d/m/Y') : '';
-    $temDados = $dados['dt'] !== '' || $dados['pallets'] !== '' || $dados['conferente'] !== '';
+    $isBox = ($dados['tipo'] ?? 'dt') === 'box';
+    $temDados = $isBox
+        ? $dados['box'] !== ''
+        : ($dados['dt'] !== '' || $dados['pallets'] !== '' || $dados['conferente'] !== '');
 @endphp
 
 <div class="container-fluid px-4 py-3 identificacao-page">
@@ -29,29 +32,78 @@
 
     <div class="card border-0 shadow-sm mb-4 no-print">
         <div class="card-body">
-            <form method="GET" action="{{ route('demandas.identificacaoA4') }}" class="row g-3">
-                <div class="col-md-3">
-                    <label class="form-label small text-muted mb-1">DT</label>
-                    <input type="text" name="dt" class="form-control form-control-sm" value="{{ $dados['dt'] }}" placeholder="Ex.: 251309435" required>
+            <div class="accordion identificacao-accordion" id="identificacaoAccordion">
+                <div class="accordion-item border rounded-3 overflow-hidden mb-2">
+                    <h2 class="accordion-header" id="headingDt">
+                        <button class="accordion-button py-2 @if($isBox) collapsed @endif" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#collapseDt"
+                            aria-expanded="{{ $isBox ? 'false' : 'true' }}" aria-controls="collapseDt">
+                            <i class="mdi mdi-file-document-outline me-2"></i> Identificação DT / Pallets
+                        </button>
+                    </h2>
+                    <div id="collapseDt" class="accordion-collapse collapse @if(!$isBox) show @endif"
+                        aria-labelledby="headingDt" data-bs-parent="#identificacaoAccordion">
+                        <div class="accordion-body">
+                            <form method="GET" action="{{ route('demandas.identificacaoA4') }}" class="row g-3">
+                                <input type="hidden" name="tipo" value="dt">
+                                <div class="col-md-3">
+                                    <label class="form-label small text-muted mb-1">DT</label>
+                                    <input type="text" name="dt" class="form-control form-control-sm"
+                                        value="{{ $dados['dt'] }}" placeholder="Ex.: 251309435">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small text-muted mb-1">Pallets</label>
+                                    <input type="text" name="pallets" class="form-control form-control-sm"
+                                        value="{{ $dados['pallets'] }}" placeholder="Ex.: 21">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small text-muted mb-1">Data</label>
+                                    <input type="date" name="data" class="form-control form-control-sm"
+                                        value="{{ $dados['data'] }}">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small text-muted mb-1">Conferente</label>
+                                    <input type="text" name="conferente" class="form-control form-control-sm"
+                                        value="{{ $dados['conferente'] }}" placeholder="Ex.: MARIA">
+                                </div>
+                                <div class="col-md-2 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-sm btn-primary w-100">
+                                        <i class="mdi mdi-eye-outline me-1"></i> Gerar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label small text-muted mb-1">Pallets</label>
-                    <input type="text" name="pallets" class="form-control form-control-sm" value="{{ $dados['pallets'] }}" placeholder="Ex.: 21" required>
+
+                <div class="accordion-item border rounded-3 overflow-hidden">
+                    <h2 class="accordion-header" id="headingBox">
+                        <button class="accordion-button py-2 @if(!$isBox) collapsed @endif" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#collapseBox"
+                            aria-expanded="{{ $isBox ? 'true' : 'false' }}" aria-controls="collapseBox">
+                            <i class="mdi mdi-package-variant-closed me-2"></i> Identificação BOX
+                        </button>
+                    </h2>
+                    <div id="collapseBox" class="accordion-collapse collapse @if($isBox) show @endif"
+                        aria-labelledby="headingBox" data-bs-parent="#identificacaoAccordion">
+                        <div class="accordion-body">
+                            <form method="GET" action="{{ route('demandas.identificacaoA4') }}" class="row g-3">
+                                <input type="hidden" name="tipo" value="box">
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted mb-1">Número do BOX</label>
+                                    <input type="text" name="box" class="form-control form-control-sm"
+                                        value="{{ $dados['box'] }}" placeholder="Ex.: 7" required>
+                                </div>
+                                <div class="col-md-2 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-sm btn-primary w-100">
+                                        <i class="mdi mdi-eye-outline me-1"></i> Gerar BOX
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label small text-muted mb-1">Data</label>
-                    <input type="date" name="data" class="form-control form-control-sm" value="{{ $dados['data'] }}" required>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label small text-muted mb-1">Conferente</label>
-                    <input type="text" name="conferente" class="form-control form-control-sm" value="{{ $dados['conferente'] }}" placeholder="Ex.: MARIA" required>
-                </div>
-                <div class="col-md-2 d-flex align-items-end">
-                    <button type="submit" class="btn btn-sm btn-primary w-100">
-                        <i class="mdi mdi-eye-outline me-1"></i> Gerar
-                    </button>
-                </div>
-            </form>
+            </div>
             <div class="small text-muted mt-3">
                 A impressão usa A4 em retrato com duas identificações repetidas, uma em cada metade da folha.
             </div>
@@ -61,28 +113,37 @@
     <div class="sheet-preview">
         <div class="a4-sheet">
             @for($i = 0; $i < 2; $i++)
-                <section class="id-copy">
-                    <table class="id-table">
-                        <tbody>
-                            <tr>
-                                <th>DT:</th>
-                                <td>{{ $dados['dt'] }}</td>
-                            </tr>
-                            <tr>
-                                <th>PALLETS</th>
-                                <td>{{ $dados['pallets'] }}</td>
-                            </tr>
-                            <tr>
-                                <th>DATA</th>
-                                <td>{{ $dataFormatada }}</td>
-                            </tr>
-                            <tr>
-                                <th>CONFERENTE</th>
-                                <td>{{ $dados['conferente'] }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </section>
+                @if($isBox)
+                    <section class="id-copy box-copy">
+                        <div class="box-identificacao">
+                            <div class="box-title">BOX</div>
+                            <div class="box-number">{{ $dados['box'] }}</div>
+                        </div>
+                    </section>
+                @else
+                    <section class="id-copy">
+                        <table class="id-table">
+                            <tbody>
+                                <tr>
+                                    <th>DT:</th>
+                                    <td>{{ $dados['dt'] }}</td>
+                                </tr>
+                                <tr>
+                                    <th>PALLETS</th>
+                                    <td>{{ $dados['pallets'] }}</td>
+                                </tr>
+                                <tr>
+                                    <th>DATA</th>
+                                    <td>{{ $dataFormatada }}</td>
+                                </tr>
+                                <tr>
+                                    <th>CONFERENTE</th>
+                                    <td>{{ $dados['conferente'] }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </section>
+                @endif
             @endfor
         </div>
     </div>
@@ -101,6 +162,18 @@
     }
 
     .icon-wrapper i { color: #fff !important; }
+
+    .identificacao-accordion .accordion-button {
+        font-weight: 700;
+        color: #1f2937;
+        background: #fff;
+    }
+
+    .identificacao-accordion .accordion-button:not(.collapsed) {
+        color: #0d6efd;
+        background: #f8fbff;
+        box-shadow: inset 0 -1px 0 rgba(13, 110, 253, 0.12);
+    }
 
     .sheet-preview {
         display: flex;
@@ -122,9 +195,9 @@
     .id-copy {
         width: 210mm;
         height: 148.5mm;
-        padding: 12mm 10mm;
+        padding: 7mm 7mm;
         display: flex;
-        align-items: flex-start;
+        align-items: stretch;
         justify-content: center;
         position: relative;
     }
@@ -133,9 +206,43 @@
         border-bottom: 1px dashed #777;
     }
 
+    .box-copy {
+        align-items: center;
+        padding: 10mm 5mm;
+    }
+
+    .box-identificacao {
+        width: 100%;
+        height: 112mm;
+        border: 1px solid #111;
+        display: grid;
+        grid-template-rows: 1fr 1fr;
+        font-family: Arial, Helvetica, sans-serif;
+        font-weight: 900;
+        color: #333;
+        line-height: 1;
+    }
+
+    .box-title,
+    .box-number {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+    }
+
+    .box-title {
+        border-bottom: 1px solid #111;
+        font-size: 92px;
+    }
+
+    .box-number {
+        font-size: 88px;
+    }
+
     .id-table {
         width: 100%;
-        height: 92mm;
+        height: 132mm;
         border-collapse: collapse;
         table-layout: fixed;
         font-family: Arial, Helvetica, sans-serif;
@@ -149,11 +256,12 @@
     }
 
     .id-table th {
-        width: 15mm;
-        text-align: left;
-        padding-left: 2mm;
-        font-size: 12px;
+        width: 23mm;
+        text-align: center;
+        padding: 0 1mm;
+        font-size: 11px;
         color: #111;
+        white-space: nowrap;
     }
 
     .id-table td {
@@ -165,15 +273,15 @@
         overflow: hidden;
     }
 
-    .id-table tr:nth-child(1) { height: 31mm; }
-    .id-table tr:nth-child(2) { height: 25mm; }
-    .id-table tr:nth-child(3) { height: 25mm; }
-    .id-table tr:nth-child(4) { height: 24mm; }
+    .id-table tr:nth-child(1) { height: 42mm; }
+    .id-table tr:nth-child(2) { height: 30mm; }
+    .id-table tr:nth-child(3) { height: 30mm; }
+    .id-table tr:nth-child(4) { height: 30mm; }
 
-    .id-table tr:nth-child(1) td { font-size: clamp(34px, 12mm, 66px); }
-    .id-table tr:nth-child(2) td { font-size: clamp(30px, 11mm, 58px); }
-    .id-table tr:nth-child(3) td { font-size: clamp(32px, 11mm, 58px); }
-    .id-table tr:nth-child(4) td { font-size: clamp(30px, 10mm, 54px); }
+    .id-table tr:nth-child(1) td { font-size: clamp(56px, 19mm, 104px); }
+    .id-table tr:nth-child(2) td { font-size: clamp(48px, 17mm, 92px); }
+    .id-table tr:nth-child(3) td { font-size: clamp(44px, 15mm, 78px); }
+    .id-table tr:nth-child(4) td { font-size: clamp(46px, 16mm, 86px); }
 
     @page {
         size: A4 portrait;

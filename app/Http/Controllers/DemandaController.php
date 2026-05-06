@@ -1164,6 +1164,39 @@ class DemandaController extends Controller
             ->whereNotNull('dd.finalizado_em')
             ->whereBetween('dd.finalizado_em', [$inicioTurno, $fimTurno]);
 
+        $demandasTurno = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereBetween('created_at', [$inicioTurno, $fimTurno]);
+        $demandasBacklog = Demanda::query()
+            ->where('possui_sobra', true)
+            ->where('created_at', '<', $inicioTurno);
+
+        $resumoStatus = [
+            'a_separar' => (clone $demandasTurno)
+                ->whereNull('separacao_iniciada_em')
+                ->count(),
+            'backlog_a_separar' => (clone $demandasBacklog)
+                ->whereNull('separacao_iniciada_em')
+                ->count(),
+            'separando' => (clone $demandasTurno)
+                ->whereNotNull('separacao_iniciada_em')
+                ->whereNull('separacao_finalizada_em')
+                ->count(),
+            'backlog_separando' => (clone $demandasBacklog)
+                ->whereNotNull('separacao_iniciada_em')
+                ->whereNull('separacao_finalizada_em')
+                ->count(),
+            'separado' => Demanda::query()
+                ->where('possui_sobra', true)
+                ->whereNotNull('separacao_finalizada_em')
+                ->whereBetween('separacao_finalizada_em', [$inicioTurno, $fimTurno])
+                ->count(),
+            'backlog_separado' => (clone $demandasBacklog)
+                ->whereNotNull('separacao_finalizada_em')
+                ->whereBetween('separacao_finalizada_em', [$inicioTurno, $fimTurno])
+                ->count(),
+        ];
+
         $separadores = (clone $baseDistribuicoes)
             ->whereNotNull('dd.separador_nome')
             ->whereRaw("TRIM(dd.separador_nome) <> ''")
@@ -1204,19 +1237,23 @@ class DemandaController extends Controller
             'fimTurno' => $fimTurno,
             'separadores' => $separadores,
             'totais' => $totais,
+            'resumoStatus' => $resumoStatus,
         ]);
     }
 
     public function identificacaoA4(Request $request)
     {
+        $tipoIdentificacao = $request->input('tipo', 'dt') === 'box' ? 'box' : 'dt';
         $dados = [
+            'tipo' => $tipoIdentificacao,
             'dt' => trim((string) $request->input('dt', '')),
+            'box' => trim((string) $request->input('box', '')),
             'pallets' => trim((string) $request->input('pallets', '')),
             'data' => $request->input('data', Carbon::today()->toDateString()),
             'conferente' => mb_strtoupper(trim((string) $request->input('conferente', ''))),
         ];
 
-        if ($dados['dt'] !== '') {
+        if ($dados['tipo'] === 'dt' && $dados['dt'] !== '') {
             $demanda = Demanda::query()
                 ->where('fo', $dados['dt'])
                 ->orWhere('id', $dados['dt'])
@@ -1309,19 +1346,19 @@ class DemandaController extends Controller
         $turno = $this->normalizarTurno($turno);
 
         if ($turno === 'T1') {
-            $query->whereRaw("TIME({$colunaDataHora}) BETWEEN ? AND ?", ['06:00:00', '13:59:59']);
+            $query->whereRaw("TIME({$colunaDataHora}) BETWEEN ? AND ?", ['06:11:00', '14:10:59']);
             return;
         }
 
         if ($turno === 'T2') {
-            $query->whereRaw("TIME({$colunaDataHora}) BETWEEN ? AND ?", ['14:00:00', '21:59:59']);
+            $query->whereRaw("TIME({$colunaDataHora}) BETWEEN ? AND ?", ['14:11:00', '22:10:59']);
             return;
         }
 
         if ($turno === 'T3') {
             $query->where(function ($q) use ($colunaDataHora) {
-                $q->whereRaw("TIME({$colunaDataHora}) BETWEEN ? AND ?", ['22:00:00', '23:59:59'])
-                    ->orWhereRaw("TIME({$colunaDataHora}) BETWEEN ? AND ?", ['00:00:00', '05:59:59']);
+                $q->whereRaw("TIME({$colunaDataHora}) BETWEEN ? AND ?", ['22:11:00', '23:59:59'])
+                    ->orWhereRaw("TIME({$colunaDataHora}) BETWEEN ? AND ?", ['00:00:00', '06:10:59']);
             });
         }
     }
@@ -1329,9 +1366,9 @@ class DemandaController extends Controller
     private function turnosOperacionais(): array
     {
         return [
-            'T1' => ['label' => 'Turno A (T1)', 'periodo' => '06h as 14h'],
-            'T2' => ['label' => 'Turno B (T2)', 'periodo' => '14h as 22h'],
-            'T3' => ['label' => 'Turno C (T3)', 'periodo' => '22h as 06h'],
+            'T1' => ['label' => 'Turno A (T1)', 'periodo' => '06:11 as 14:10'],
+            'T2' => ['label' => 'Turno B (T2)', 'periodo' => '14:11 as 22:10'],
+            'T3' => ['label' => 'Turno C (T3)', 'periodo' => '22:11 as 06:10'],
         ];
     }
 
@@ -1349,11 +1386,11 @@ class DemandaController extends Controller
     {
         $hora = Carbon::now()->format('H:i:s');
 
-        if ($hora >= '06:00:00' && $hora < '14:00:00') {
+        if ($hora >= '06:11:00' && $hora <= '14:10:59') {
             return 'T1';
         }
 
-        if ($hora >= '14:00:00' && $hora < '22:00:00') {
+        if ($hora >= '14:11:00' && $hora <= '22:10:59') {
             return 'T2';
         }
 
@@ -1366,16 +1403,16 @@ class DemandaController extends Controller
 
         return match ($turno) {
             'T2' => [
-                $dia->copy()->setTime(14, 0),
-                $dia->copy()->setTime(21, 59, 59),
+                $dia->copy()->setTime(14, 11),
+                $dia->copy()->setTime(22, 10, 59),
             ],
             'T3' => [
-                $dia->copy()->setTime(22, 0),
-                $dia->copy()->addDay()->setTime(5, 59, 59),
+                $dia->copy()->setTime(22, 11),
+                $dia->copy()->addDay()->setTime(6, 10, 59),
             ],
             default => [
-                $dia->copy()->setTime(6, 0),
-                $dia->copy()->setTime(13, 59, 59),
+                $dia->copy()->setTime(6, 11),
+                $dia->copy()->setTime(14, 10, 59),
             ],
         };
     }
