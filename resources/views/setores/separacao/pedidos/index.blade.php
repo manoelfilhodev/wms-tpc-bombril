@@ -54,15 +54,15 @@
                         <span class="input-group-text bg-light border-end-0">
                             <i class="mdi mdi-calendar text-muted"></i>
                         </span>
-                        <input type="date" name="data" class="form-control border-start-0" value="{{ request('data') }}">
+                        <input type="date" name="data" class="form-control border-start-0" value="{{ $dataFiltro ?? request('data') }}">
                     </div>
                 </div>
                 <div class="col-md-3 d-flex align-items-end gap-2">
                     <button type="submit" class="btn btn-primary flex-fill">
                         <i class="mdi mdi-magnify me-1"></i> Filtrar
                     </button>
-                    @if(request()->hasAny(['numero','fo','data']))
-                        <a href="{{ url()->current() }}" class="btn btn-outline-secondary" data-bs-toggle="tooltip" title="Limpar filtros">
+                    @if(request()->hasAny(['numero','fo','data']) || !empty($dataFiltro))
+                        <a href="{{ route('pedidos.index', ['limpar_filtros' => 1]) }}" class="btn btn-outline-secondary" data-bs-toggle="tooltip" title="Limpar filtros">
                             <i class="mdi mdi-close"></i>
                         </a>
                     @endif
@@ -105,7 +105,7 @@
                                     </span>
                                 </td>
                                 <td class="px-4 py-3 text-muted">
-                                    {{ \Carbon\Carbon::parse($pedido->created_at)->format('d/m/Y H:i') }}
+                                    {{ \Carbon\Carbon::parse($pedido->data_criacao ?? $pedido->created_at)->format('d/m/Y H:i') }}
                                 </td>
                                 <td class="px-4 py-3">
                                     <span class="badge bg-secondary">Pendente</span>

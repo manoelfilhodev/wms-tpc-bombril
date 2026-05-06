@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\DeviceAuthorizationService;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
@@ -35,6 +36,11 @@ return Application::configure(basePath: dirname(__DIR__))
         Illuminate\Translation\TranslationServiceProvider::class,
     ])
     ->withMiddleware(function (Middleware $middleware) {
+        $middleware->encryptCookies(except: [
+            DeviceAuthorizationService::COOKIE_NAME,
+            DeviceAuthorizationService::LEGACY_COOKIE_NAME,
+        ]);
+
         $middleware->api(append: [
             App\Http\Middleware\ApiRequestLogger::class,
         ]);

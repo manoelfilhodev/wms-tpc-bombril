@@ -10,16 +10,40 @@ use Illuminate\Support\Facades\Auth;
 
 class PedidoController extends Controller
 {
+    private const FILTRO_DATA_SESSION_KEY = 'separacao_pedidos_filtro_data';
     
-    public function index()
-{
-    $pedidos = \App\Models\Setores\Pedido::with('itens')
-                ->where('status', 'pendente')
-                ->orderByDesc('id')
-                ->get();
+    public function index(Request $request)
+    {
+        if ($request->boolean('limpar_filtros')) {
+            $request->session()->forget(self::FILTRO_DATA_SESSION_KEY);
 
-    return view('setores.separacao.pedidos.index', compact('pedidos'));
-}
+            return redirect()->route('pedidos.index');
+        }
+
+        $dataFiltro = $this->resolverFiltroData($request);
+
+        $pedidos = Pedido::with('itens')
+            ->where('status', 'pendente')
+            ->when($request->filled('numero'), function ($query) use ($request) {
+                $numero = $request->string('numero')->trim()->value();
+
+                $query->where('numero_pedido', 'like', "%{$numero}%");
+            })
+            ->when($request->filled('fo'), function ($query) use ($request) {
+                $fo = $request->string('fo')->trim()->value();
+
+                $query->whereHas('itens', function ($itensQuery) use ($fo) {
+                    $itensQuery->where('fo', 'like', "%{$fo}%");
+                });
+            })
+            ->when($dataFiltro, function ($query) use ($dataFiltro) {
+                $query->whereDate('data_criacao', $dataFiltro);
+            })
+            ->orderByDesc('id')
+            ->get();
+
+        return view('setores.separacao.pedidos.index', compact('pedidos', 'dataFiltro'));
+    }
     
     public function show($id)
 {
@@ -95,5 +119,28 @@ class PedidoController extends Controller
         }
 
         return redirect()->route('pedidos.show', $pedido->id)->with('success', 'Pedido criado com sucesso!');
+    }
+
+    private function resolverFiltroData(Request $request): ?string
+    {
+        if ($request->has('data')) {
+            $data = $request->string('data')->trim()->value();
+
+            if ($data === '') {
+                $request->session()->forget(self::FILTRO_DATA_SESSION_KEY);
+
+                return null;
+            }
+
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $data) === 1) {
+                $request->session()->put(self::FILTRO_DATA_SESSION_KEY, $data);
+
+                return $data;
+            }
+
+            return null;
+        }
+
+        return $request->session()->get(self::FILTRO_DATA_SESSION_KEY);
     }
 }

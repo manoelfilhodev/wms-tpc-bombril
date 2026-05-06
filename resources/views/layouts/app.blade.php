@@ -19,6 +19,9 @@
     <link href="{{ asset('assets/css/app-creative-dark.min.css') }}" rel="stylesheet" type="text/css" id="dark-style" />
     <link href="{{ asset('assets/css/wms-ui.css') }}" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    @env('local')
+        @vite('resources/js/app.js')
+    @endenv
 
     <style>
         .content::before { content: none !important; }
@@ -58,6 +61,8 @@
 </head>
 
 <body class="loading {{ $isOperatorLayout ? 'operator-fullscreen' : '' }}" data-layout-config='{"leftSideBarTheme":"dark","layoutBoxed":false,"leftSidebarCondensed":false,"darkMode":false}'>
+    @include('partials.dev-environment-badge')
+
     <div class="wrapper">
         @auth
             @if(! $isOperatorLayout)

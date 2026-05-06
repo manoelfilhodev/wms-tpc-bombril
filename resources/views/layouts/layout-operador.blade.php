@@ -13,6 +13,9 @@
     <link href="{{ asset('assets/css/wms-ui.css') }}" rel="stylesheet" type="text/css" />
     <link rel="manifest" href="{{ asset('manifest.webmanifest') }}">
     <meta name="theme-color" content="#111827">
+    @env('local')
+        @vite('resources/js/app.js')
+    @endenv
 
     <style>
         :root {
@@ -74,6 +77,8 @@
     @yield('head')
 </head>
 <body data-layout-config='{"leftSideBarTheme":"dark","layoutBoxed":false,"leftSidebarCondensed":false,"darkMode":true}'>
+    @include('partials.dev-environment-badge')
+
     <div class="top-bar-operador d-flex justify-content-between align-items-center px-3 py-2 shadow-sm bg-dark">
         <div>
             <button onclick="history.back()" class="btn btn-outline-light btn-sm d-flex align-items-center" title="Voltar para a pagina anterior">

@@ -10,8 +10,13 @@
     <link href="{{ asset('assets/css/app-creative.min.css') }}" rel="stylesheet" type="text/css" id="light-style" />
     <link href="{{ asset('assets/css/app-creative-dark.min.css') }}" rel="stylesheet" type="text/css" id="dark-style" />
     <link href="{{ asset('assets/css/wms-ui.css') }}" rel="stylesheet" type="text/css" />
+    @env('local')
+        @vite('resources/js/app.js')
+    @endenv
 </head>
 <body class="authentication-bg" data-layout-config='{"darkMode":false}'>
+    @include('partials.dev-environment-badge')
+
     @yield('content')
     <script src="{{ asset('assets/js/vendor.min.js') }}"></script>
     <script src="{{ asset('assets/js/app.min.js') }}"></script>

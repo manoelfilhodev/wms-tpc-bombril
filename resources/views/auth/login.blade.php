@@ -104,7 +104,8 @@
             (function() {
                 const key = @json($deviceCookieName);
                 const legacyKey = @json($legacyDeviceCookieName);
-                let deviceId = @json($deviceId);
+                const storedDeviceId = localStorage.getItem(key) || localStorage.getItem(legacyKey);
+                let deviceId = storedDeviceId || @json($deviceId);
 
                 if (!deviceId && window.crypto && typeof window.crypto.randomUUID === 'function') {
                     deviceId = window.crypto.randomUUID();

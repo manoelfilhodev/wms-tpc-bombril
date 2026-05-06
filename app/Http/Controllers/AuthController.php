@@ -13,7 +13,9 @@ class AuthController extends Controller
 {
     public function showLoginForm(Request $request)
     {
-        $deviceId = $request->cookie(DeviceAuthorizationService::COOKIE_NAME);
+        $deviceId = $request->cookie(DeviceAuthorizationService::COOKIE_NAME)
+            ?: $request->cookie(DeviceAuthorizationService::LEGACY_COOKIE_NAME);
+        $deviceId = trim((string) $deviceId);
 
         if (! $deviceId) {
             $deviceId = (string) str()->uuid();
@@ -44,6 +46,9 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
+        $deviceId = $request->cookie(DeviceAuthorizationService::COOKIE_NAME)
+            ?: $request->cookie(DeviceAuthorizationService::LEGACY_COOKIE_NAME);
+        $deviceId = trim((string) $deviceId);
         $credentials = $request->only('email', 'password');
 
         if (empty($credentials['email']) || empty($credentials['password'])) {
@@ -83,14 +88,28 @@ class AuthController extends Controller
                 (int) $usuario->id_user,
                 (int) $usuario->unidade_id,
                 'login - sucesso',
-                ['email' => $usuario->email],
+                ['email' => $usuario->email, 'device_id' => $deviceId ?: null],
                 $request
             );
         }
 
-        return $usuario->tipo === 'operador'
+        $redirect = $usuario->tipo === 'operador'
             ? redirect()->route('painel.operador')
             : redirect()->route('demandas.dashboardOperacional');
+
+        return $deviceId
+            ? $redirect->withCookie(cookie(
+                DeviceAuthorizationService::COOKIE_NAME,
+                $deviceId,
+                60 * 24 * 365,
+                '/',
+                null,
+                false,
+                false,
+                false,
+                'lax'
+            ))
+            : $redirect;
     }
 
     public function logout(Request $request)

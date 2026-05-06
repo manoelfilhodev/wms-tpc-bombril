@@ -5,6 +5,9 @@
     <title>Painel TV</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="{{ asset('assets/css/wms-ui.css') }}" rel="stylesheet" type="text/css" />
+    @env('local')
+        @vite('resources/js/app.js')
+    @endenv
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
@@ -19,6 +22,8 @@
     </style>
 </head>
 <body>
+    @include('partials.dev-environment-badge')
+
     @yield('content')
 
     <script>
