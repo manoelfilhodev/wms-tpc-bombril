@@ -9,19 +9,19 @@ use App\Models\ContagemItem;
 
 class DashboardService
 {
-    
+
     public function getStatusContagemGeral()
-{
-    $hoje = \Carbon\Carbon::today();
+    {
+        $hoje = \Carbon\Carbon::today();
 
-    $totalMateriais = \App\Models\ItemContagem::count();
+        $totalMateriais = \App\Models\ItemContagem::count();
 
-    $totalContados = \App\Models\ContagemItem::whereDate('data_contagem', $hoje)
-        ->distinct('codigo_material')
-        ->count('codigo_material');
+        $totalContados = \App\Models\ContagemItem::whereDate('data_contagem', $hoje)
+            ->distinct('codigo_material')
+            ->count('codigo_material');
 
-    return $totalMateriais === $totalContados;
-}
+        return $totalMateriais === $totalContados;
+    }
     public function getTotaisGerais(): array
     {
         return [
@@ -338,7 +338,7 @@ class DashboardService
             ->map(function ($item) {
                 return [
                     'dia'        => date('d', strtotime($item->dia)),
-                    'acuracidade'=> $item->total > 0 ? round(($item->corretos / $item->total) * 100, 1) : 0,
+                    'acuracidade' => $item->total > 0 ? round(($item->corretos / $item->total) * 100, 1) : 0,
                 ];
             });
     }
@@ -428,115 +428,137 @@ class DashboardService
                 'peso'     => $peso,
             ],
             'por_status'        => $porStatus,
-            'por_transportadora'=> $porTransportadora,
+            'por_transportadora' => $porTransportadora,
         ];
     }
-    
-public function getProjecaoProdutividade($dataReferencia = null)
-{
-    $hoje = $dataReferencia
-        ? Carbon::parse($dataReferencia)->startOfDay()
-        : Carbon::today();
-    $agora = Carbon::now();
-    $meta = 11000;
-    $metaPorHora = 1000;
-    $horaInicio = $hoje->copy()->setTime(12, 0, 0);
-    $horaFim = $hoje->copy()->setTime(23, 0, 0);
 
-    $curvaIdeal = [];
-    $acumulado = [];
-    $projecaoCorrigida = [];
+    public function getProjecaoProdutividade($dataReferencia = null)
+    {
+        $data = $dataReferencia
+            ? Carbon::parse($dataReferencia)->startOfDay()
+            : Carbon::today();
 
-    $fimProducaoReal = $hoje->isSameDay($agora)
-        ? ($agora->lessThan($horaInicio)
-        ? $horaInicio->copy()
-        : ($agora->greaterThan($horaFim) ? $horaFim->copy() : $agora->copy()))
-        : ($hoje->lessThan($agora->copy()->startOfDay()) ? $horaFim->copy() : $horaInicio->copy());
+        $agora = Carbon::now();
 
-    $produzido = (int) DB::table('_tb_demanda_distribuicoes as dd')
-        ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
-        ->where('d.possui_sobra', true)
-        ->whereNotNull('dd.finalizado_em')
-        ->whereBetween('dd.finalizado_em', [$horaInicio, $fimProducaoReal])
-        ->sum('dd.quantidade_pecas');
+        $meta = 11000;
+        $metaPorHora = 1000;
 
-    $tempoDecorridoHoras = $fimProducaoReal->greaterThan($horaInicio)
-        ? min($horaInicio->diffInMinutes($fimProducaoReal) / 60, 11)
-        : 0;
+        $inicioOperacao = $data->copy()->setTime(12, 0, 0);
+        $fimOperacao = $data->copy()->endOfDay();
+        $horaFimGrafico = $data->copy()->setTime(23, 0, 0);
 
-    $velocidadeAtual = $tempoDecorridoHoras > 0
-        ? round($produzido / $tempoDecorridoHoras, 2)
-        : 0;
+        $fimProducaoReal = $data->isSameDay($agora)
+            ? min($agora->copy(), $fimOperacao->copy())
+            : ($data->lessThan($agora->copy()->startOfDay()) ? $fimOperacao->copy() : $inicioOperacao->copy());
 
-    $velocidadeNecessaria = $produzido >= $meta ? 0 : $metaPorHora;
-    $progresso = $metaPorHora > 0 ? $velocidadeAtual / $metaPorHora : 0;
-
-    if ($produzido >= $meta || $progresso >= 1) {
-        $statusProdutividade = 'ok';
-    } elseif ($progresso >= 0.8) {
-        $statusProdutividade = 'atencao';
-    } else {
-        $statusProdutividade = 'baixo';
-    }
-
-    $previsaoConclusao = null;
-    if ($velocidadeAtual > 0) {
-        $horasParaMeta = $meta / $velocidadeAtual;
-        $previsao = $horaInicio->copy()->addMinutes((int) round($horasParaMeta * 60));
-        $previsaoConclusao = $previsao->lessThanOrEqualTo($horaFim) ? $previsao->format('H:i') : null;
-    }
-
-    for ($intervalo = $horaInicio->copy(); $intervalo <= $horaFim; $intervalo->addHour()) {
-        $horasMeta = (int) $horaInicio->diffInHours($intervalo);
-        $acumuladoIdeal = min($meta, $horasMeta * $metaPorHora);
-
-        $curvaIdeal[] = [
-            'hora' => $intervalo->format('H:i'),
-            'valor' => $acumuladoIdeal,
-        ];
-
-        $acumuladoReal = null;
-        if ($intervalo->lessThanOrEqualTo($fimProducaoReal)) {
-            $acumuladoReal = (int) DB::table('_tb_demanda_distribuicoes as dd')
-                ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
-                ->where('d.possui_sobra', true)
-                ->whereNotNull('dd.finalizado_em')
-                ->whereBetween('dd.finalizado_em', [$horaInicio, $intervalo])
-                ->sum('dd.quantidade_pecas');
+        if ($fimProducaoReal->lessThan($inicioOperacao)) {
+            $fimProducaoReal = $inicioOperacao->copy();
         }
 
-        $acumulado[] = [
-            'hora' => $intervalo->format('H:i'),
-            'acumulado' => $acumuladoReal,
-        ];
+        $produzido = (int) DB::table('_tb_demanda_distribuicoes as dd')
+            ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
+            ->where('d.possui_sobra', true)
+            ->whereNotNull('dd.finalizado_em')
+            ->whereBetween('dd.finalizado_em', [$inicioOperacao, $fimProducaoReal])
+            ->sum('dd.quantidade_pecas');
 
-        $valorProjetado = null;
-        if ($velocidadeAtual > 0 && $intervalo->greaterThan($fimProducaoReal)) {
-            $horasProjetadas = $horaInicio->diffInMinutes($intervalo) / 60;
-            $valorProjetado = min($meta, (int) round($velocidadeAtual * $horasProjetadas));
+        $tempoDecorridoHoras = $fimProducaoReal->greaterThan($inicioOperacao)
+            ? min($inicioOperacao->diffInMinutes($fimProducaoReal) / 60, 11)
+            : 0;
+
+        $velocidadeAtual = $tempoDecorridoHoras > 0
+            ? round($produzido / $tempoDecorridoHoras, 2)
+            : 0;
+
+        $progresso = $metaPorHora > 0 ? $velocidadeAtual / $metaPorHora : 0;
+
+        if ($produzido >= $meta || $progresso >= 1) {
+            $statusProdutividade = 'ok';
+        } elseif ($progresso >= 0.8) {
+            $statusProdutividade = 'atencao';
+        } else {
+            $statusProdutividade = 'baixo';
         }
 
-        $projecaoCorrigida[] = [
-            'hora' => $intervalo->format('H:i'),
-            'valor' => $valorProjetado,
+        $previsaoConclusao = null;
+
+        if ($velocidadeAtual > 0) {
+            $horasParaMeta = $meta / $velocidadeAtual;
+            $previsao = $inicioOperacao->copy()->addMinutes((int) round($horasParaMeta * 60));
+            $previsaoConclusao = $previsao->lessThanOrEqualTo($fimOperacao)
+                ? $previsao->format('H:i')
+                : null;
+        }
+
+        $curvaIdeal = [];
+        $acumulado = [];
+        $projecaoCorrigida = [];
+
+        for ($intervalo = $inicioOperacao->copy(); $intervalo <= $horaFimGrafico; $intervalo->addHour()) {
+            $horaLabel = $intervalo->format('H:i');
+
+            $horasMeta = (int) $inicioOperacao->diffInHours($intervalo);
+            $acumuladoIdeal = min($meta, $horasMeta * $metaPorHora);
+
+            $curvaIdeal[] = [
+                'hora' => $horaLabel,
+                'valor' => $acumuladoIdeal,
+            ];
+
+            $acumuladoReal = null;
+
+            if ($intervalo->lessThanOrEqualTo($fimProducaoReal)) {
+                $fimIntervalo = $intervalo->copy();
+
+                if ($intervalo->hour === 23) {
+                    $fimIntervalo = $fimOperacao->copy();
+                }
+
+                if ($data->isSameDay($agora) && $intervalo->hour === $agora->hour) {
+                    $fimIntervalo = $fimProducaoReal->copy();
+                }
+
+                $acumuladoReal = (int) DB::table('_tb_demanda_distribuicoes as dd')
+                    ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
+                    ->where('d.possui_sobra', true)
+                    ->whereNotNull('dd.finalizado_em')
+                    ->whereBetween('dd.finalizado_em', [$inicioOperacao, $fimIntervalo])
+                    ->sum('dd.quantidade_pecas');
+            }
+
+            $acumulado[] = [
+                'hora' => $horaLabel,
+                'acumulado' => $acumuladoReal,
+            ];
+
+            $valorProjetado = null;
+
+            if ($velocidadeAtual > 0 && $intervalo->greaterThan($fimProducaoReal)) {
+                $horasProjetadas = max(0, $inicioOperacao->diffInMinutes($intervalo) / 60);
+                $valorProjetado = min($meta, (int) round($velocidadeAtual * $horasProjetadas));
+            }
+
+            $projecaoCorrigida[] = [
+                'hora' => $horaLabel,
+                'valor' => $valorProjetado,
+            ];
+        }
+
+        return [
+            'meta' => $meta,
+            'metaPorHora' => $metaPorHora,
+            'produzido' => $produzido,
+            'apontamentos' => $acumulado,
+            'curvaIdeal' => $curvaIdeal,
+            'projecaoCorrigida' => $projecaoCorrigida,
+            'velocidadeNecessaria' => $produzido >= $meta ? 0 : $metaPorHora,
+            'velocidadeAtual' => $velocidadeAtual,
+            'previsaoConclusao' => $previsaoConclusao,
+            'statusProdutividade' => $statusProdutividade,
         ];
     }
 
-    return [
-        'meta' => $meta,
-        'metaPorHora' => $metaPorHora,
-        'produzido' => $produzido,
-        'apontamentos' => $acumulado,
-        'curvaIdeal' => $curvaIdeal,
-        'projecaoCorrigida' => $projecaoCorrigida,
-        'velocidadeNecessaria' => $velocidadeNecessaria,
-        'velocidadeAtual' => $velocidadeAtual,
-        'previsaoConclusao' => $previsaoConclusao,
-        'statusProdutividade' => $statusProdutividade,
-    ];
-}
-
-// 🔹 Produção por operador
+    // 🔹 Produção por operador
     public function getProducaoPorOperador(): array
     {
         $hoje = Carbon::today();
@@ -551,7 +573,7 @@ public function getProjecaoProdutividade($dataReferencia = null)
             ->toArray();
     }
 
-// 🔹 Produção por SKU
+    // 🔹 Produção por SKU
     public function getProducaoPorSku(): array
     {
         $hoje = Carbon::today();
@@ -565,86 +587,86 @@ public function getProjecaoProdutividade($dataReferencia = null)
             ->toArray();
     }
 
-public function getMetaRealizado(Carbon $data): array
-{
-    // Planejado (GERADO + APONTADO) agrupado por SKU
-    $planejado = \DB::table('_tb_apontamentos_kits')
-        ->select('codigo_material', \DB::raw('SUM(quantidade) as qtd'))
-        ->whereDate('updated_at', $data)
-        ->whereIn('status', ['GERADO', 'APONTADO'])
-        ->groupBy('codigo_material')
-        ->pluck('qtd', 'codigo_material')
-        ->toArray();
+    public function getMetaRealizado(Carbon $data): array
+    {
+        // Planejado (GERADO + APONTADO) agrupado por SKU
+        $planejado = \DB::table('_tb_apontamentos_kits')
+            ->select('codigo_material', \DB::raw('SUM(quantidade) as qtd'))
+            ->whereDate('updated_at', $data)
+            ->whereIn('status', ['GERADO', 'APONTADO'])
+            ->groupBy('codigo_material')
+            ->pluck('qtd', 'codigo_material')
+            ->toArray();
 
-    // Realizado (somente APONTADO) agrupado por SKU
-    $realizado = \DB::table('_tb_apontamentos_kits')
-        ->select('codigo_material', \DB::raw('SUM(quantidade) as qtd'))
-        ->whereDate('updated_at', $data)
-        ->where('status', 'APONTADO')
-        ->groupBy('codigo_material')
-        ->pluck('qtd', 'codigo_material')
-        ->toArray();
+        // Realizado (somente APONTADO) agrupado por SKU
+        $realizado = \DB::table('_tb_apontamentos_kits')
+            ->select('codigo_material', \DB::raw('SUM(quantidade) as qtd'))
+            ->whereDate('updated_at', $data)
+            ->where('status', 'APONTADO')
+            ->groupBy('codigo_material')
+            ->pluck('qtd', 'codigo_material')
+            ->toArray();
 
-    // Monta array consolidado por SKU
-    $detalhes = [];
-    foreach (array_keys($planejado + $realizado) as $sku) {
-        $detalhes[] = [
-            'sku'       => $sku,
-            'planejado' => (int) ($planejado[$sku] ?? 0),
-            'realizado' => (int) ($realizado[$sku] ?? 0),
+        // Monta array consolidado por SKU
+        $detalhes = [];
+        foreach (array_keys($planejado + $realizado) as $sku) {
+            $detalhes[] = [
+                'sku'       => $sku,
+                'planejado' => (int) ($planejado[$sku] ?? 0),
+                'realizado' => (int) ($realizado[$sku] ?? 0),
+            ];
+        }
+
+        return [
+            'planejado' => array_sum($planejado),
+            'realizado' => array_sum($realizado),
+            'detalhes'  => $detalhes,
         ];
     }
-
-    return [
-        'planejado' => array_sum($planejado),
-        'realizado' => array_sum($realizado),
-        'detalhes'  => $detalhes,
-    ];
-}
 
 
     /**
      * Tempo médio entre paletes (em minutos)
      */
-public function getTempoMedioPaletes($data)
-{
-    $inicioMes = Carbon::parse($data)->startOfMonth();
-    $fim = Carbon::parse($data);
+    public function getTempoMedioPaletes($data)
+    {
+        $inicioMes = Carbon::parse($data)->startOfMonth();
+        $fim = Carbon::parse($data);
 
-    $resultados = [];
-    $todasMedias = [];
+        $resultados = [];
+        $todasMedias = [];
 
-    for ($dia = $inicioMes->copy(); $dia <= $fim; $dia->addDay()) {
-        $apontamentos = \DB::table('_tb_apontamentos_kits')
-            ->whereDate('updated_at', $dia)
-            ->where('status', 'APONTADO')
-            ->orderBy('updated_at')
-            ->pluck('updated_at');
+        for ($dia = $inicioMes->copy(); $dia <= $fim; $dia->addDay()) {
+            $apontamentos = \DB::table('_tb_apontamentos_kits')
+                ->whereDate('updated_at', $dia)
+                ->where('status', 'APONTADO')
+                ->orderBy('updated_at')
+                ->pluck('updated_at');
 
-        $tempos = [];
-        for ($i = 1; $i < count($apontamentos); $i++) {
-            $anterior = Carbon::parse($apontamentos[$i - 1]);
-            $atual = Carbon::parse($apontamentos[$i]);
-            $tempos[] = $anterior->diffInMinutes($atual);
+            $tempos = [];
+            for ($i = 1; $i < count($apontamentos); $i++) {
+                $anterior = Carbon::parse($apontamentos[$i - 1]);
+                $atual = Carbon::parse($apontamentos[$i]);
+                $tempos[] = $anterior->diffInMinutes($atual);
+            }
+
+            $media = count($tempos) > 0 ? round(array_sum($tempos) / count($tempos), 2) : 0;
+            $todasMedias[] = $media;
+
+            $resultados[] = [
+                'data' => $dia->format('d/m'),
+                'media' => $media,
+            ];
         }
 
-        $media = count($tempos) > 0 ? round(array_sum($tempos) / count($tempos), 2) : 0;
-        $todasMedias[] = $media;
+        // 🔹 Calcula média do mês
+        $mediaMensal = count($todasMedias) > 0 ? round(array_sum($todasMedias) / count($todasMedias), 2) : 0;
 
-        $resultados[] = [
-            'data' => $dia->format('d/m'),
-            'media' => $media,
+        return [
+            'dias' => $resultados,
+            'media_mensal' => $mediaMensal
         ];
     }
-
-    // 🔹 Calcula média do mês
-    $mediaMensal = count($todasMedias) > 0 ? round(array_sum($todasMedias) / count($todasMedias), 2) : 0;
-
-    return [
-        'dias' => $resultados,
-        'media_mensal' => $mediaMensal
-    ];
-}
 
 
 
@@ -680,7 +702,7 @@ public function getTempoMedioPaletes($data)
     /**
      * Produção diária (por data)
      */
-public function getProducaoDiaria(Carbon $data): array
+    public function getProducaoDiaria(Carbon $data): array
     {
         $inicioMes = $data->copy()->startOfMonth();
         $fim       = $data->copy()->endOfDay();
@@ -705,34 +727,34 @@ public function getProducaoDiaria(Carbon $data): array
     /**
      * Produção por hora no dia
      */
-public function getProducaoPorHora(Carbon $data): array
-{
-    $horas = range(6, 22); // faixa de 06h às 22h
-    $dados = [];
+    public function getProducaoPorHora(Carbon $data): array
+    {
+        $horas = range(6, 22); // faixa de 06h às 22h
+        $dados = [];
 
-    foreach ($horas as $h) {
-        $inicio = $data->copy()->setTime($h, 0, 0);
-        $fim    = $data->copy()->setTime($h, 59, 59);
+        foreach ($horas as $h) {
+            $inicio = $data->copy()->setTime($h, 0, 0);
+            $fim    = $data->copy()->setTime($h, 59, 59);
 
-        $produzido = \DB::table('_tb_apontamentos_kits')
-            ->where('status', 'APONTADO')
-            ->whereBetween('updated_at', [$inicio, $fim])
-            ->sum('quantidade'); // ✅ corrigido para somar a quantidade
+            $produzido = \DB::table('_tb_apontamentos_kits')
+                ->where('status', 'APONTADO')
+                ->whereBetween('updated_at', [$inicio, $fim])
+                ->sum('quantidade'); // ✅ corrigido para somar a quantidade
 
-        $dados[] = [
-            'hora'  => str_pad($h, 2, '0', STR_PAD_LEFT) . 'h',
-            'total' => (int) $produzido,
-        ];
+            $dados[] = [
+                'hora'  => str_pad($h, 2, '0', STR_PAD_LEFT) . 'h',
+                'total' => (int) $produzido,
+            ];
+        }
+
+        return $dados;
     }
-
-    return $dados;
-}
 
 
     /**
      * Produção por material (SKU)
      */
-public function getProducaoPorMaterial(Carbon $data): array
+    public function getProducaoPorMaterial(Carbon $data): array
     {
         $inicioMes = $data->copy()->startOfMonth();
         $fim       = $data->copy()->endOfDay();
@@ -764,7 +786,4 @@ public function getProducaoPorMaterial(Carbon $data): array
             ->get()
             ->toArray();
     }
-
-
-
 }

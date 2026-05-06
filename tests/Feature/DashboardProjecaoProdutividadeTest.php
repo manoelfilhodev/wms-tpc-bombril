@@ -20,7 +20,7 @@ class DashboardProjecaoProdutividadeTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_projecao_de_produtividade_usa_caixas_separadas_apos_meio_dia(): void
+    public function test_projecao_de_produtividade_usa_caixas_do_dia_inteiro_com_meta_apos_meio_dia(): void
     {
         Carbon::setTestNow('2026-05-06 15:00:00');
 
@@ -34,15 +34,15 @@ class DashboardProjecaoProdutividadeTest extends TestCase
 
         $this->assertSame(11000, $dados['meta']);
         $this->assertSame(1000, $dados['metaPorHora']);
-        $this->assertSame(2000, $dados['produzido']);
-        $this->assertSame(666.67, $dados['velocidadeAtual']);
-        $this->assertSame('baixo', $dados['statusProdutividade']);
-        $this->assertNull($dados['previsaoConclusao']);
+        $this->assertSame(2999, $dados['produzido']);
+        $this->assertSame(999.67, $dados['velocidadeAtual']);
+        $this->assertSame('atencao', $dados['statusProdutividade']);
+        $this->assertSame('23:00', $dados['previsaoConclusao']);
 
-        $this->assertSame(['12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00'], array_column($dados['curvaIdeal'], 'hora'));
-        $this->assertSame([0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000], array_column($dados['curvaIdeal'], 'valor'));
-        $this->assertSame([0, 500, 1200, 2000, null, null, null, null, null, null, null, null], array_column($dados['apontamentos'], 'acumulado'));
-        $this->assertSame([null, null, null, null, 2667, 3333, 4000, 4667, 5333, 6000, 6667, 7333], array_column($dados['projecaoCorrigida'], 'valor'));
+        $this->assertSame(['00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00'], array_column($dados['curvaIdeal'], 'hora'));
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000], array_column($dados['curvaIdeal'], 'valor'));
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 999, 1499, 2199, 2999, null, null, null, null, null, null, null, null], array_column($dados['apontamentos'], 'acumulado'));
+        $this->assertSame(10996, $dados['projecaoCorrigida'][23]['valor']);
     }
 
     public function test_projecao_corrigida_mostra_meta_atingida_antes_das_vinte_e_tres(): void
@@ -58,8 +58,8 @@ class DashboardProjecaoProdutividadeTest extends TestCase
         $this->assertSame(2000.0, $dados['velocidadeAtual']);
         $this->assertSame('17:30', $dados['previsaoConclusao']);
         $this->assertSame('ok', $dados['statusProdutividade']);
-        $this->assertSame(11000, $dados['projecaoCorrigida'][6]['valor']);
-        $this->assertSame('18:00', $dados['projecaoCorrigida'][6]['hora']);
+        $this->assertSame(11000, $dados['projecaoCorrigida'][18]['valor']);
+        $this->assertSame('18:00', $dados['projecaoCorrigida'][18]['hora']);
     }
 
     public function test_projecao_respeita_data_operacional_selecionada(): void
@@ -72,7 +72,7 @@ class DashboardProjecaoProdutividadeTest extends TestCase
         $dados = app(DashboardService::class)->getProjecaoProdutividade('2026-05-05');
 
         $this->assertSame(1500, $dados['produzido']);
-        $this->assertSame([0, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500], array_column($dados['apontamentos'], 'acumulado'));
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500], array_column($dados['apontamentos'], 'acumulado'));
     }
 
     public function test_dashboard_operacional_ancora_grafico_acumulativo_na_data_selecionada(): void
@@ -88,7 +88,27 @@ class DashboardProjecaoProdutividadeTest extends TestCase
             ->assertDontSee('06\/05', false);
     }
 
-    private function criarDemandaSeparada(string $fo, int $quantidade, string $finalizadaEm): Demanda
+    public function test_dashboard_operacional_exibe_separacao_por_hora_e_operador(): void
+    {
+        Carbon::setTestNow('2026-05-06 14:00:00');
+
+        $this->criarDemandaSeparada('DT-OPERADOR-A', 15, '2026-05-05 22:14:00', 'Operador A');
+        $this->criarDemandaSeparada('DT-OPERADOR-B', 20, '2026-05-05 22:30:00', 'Operador B');
+
+        $this->actingAs($this->createUser())
+            ->withSession(['tipo' => 'admin', 'nivel' => 'Admin'])
+            ->get(route('demandas.dashboardOperacional', ['data' => '2026-05-05']))
+            ->assertOk()
+            ->assertSee('Separação por hora x operador')
+            ->assertSee('Operador A')
+            ->assertSee('Operador B')
+            ->assertSee('"22:00"', false)
+            ->assertSee('"label":"Operador A"', false)
+            ->assertSee('"label":"Operador B"', false)
+            ->assertSee('"total":35', false);
+    }
+
+    private function criarDemandaSeparada(string $fo, int $quantidade, string $finalizadaEm, string $separadorNome = 'Separador Teste'): Demanda
     {
         $demanda = Demanda::create($this->demandaData($fo, $quantidade, [
             'status' => 'CONFERIDO',
@@ -99,7 +119,7 @@ class DashboardProjecaoProdutividadeTest extends TestCase
 
         DemandaDistribuicao::create([
             'demanda_id' => $demanda->id,
-            'separador_nome' => 'Separador Teste',
+            'separador_nome' => $separadorNome,
             'quantidade_pecas' => $quantidade,
             'quantidade_skus' => 1,
             'finalizado_em' => $finalizadaEm,
