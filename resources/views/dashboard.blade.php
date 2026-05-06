@@ -394,7 +394,7 @@
                 <div class="card h-100">
                     <div class="card-header">
                         <i class="mdi mdi-chart-timeline-variant text-primary me-2"></i>
-                        Projeção de Produtividade
+                        Projeção de Produtividade (caixas)
                     </div>
                     <div class="card-body">
                         <canvas id="graficoProdutividade" height="120"></canvas>
@@ -743,7 +743,7 @@
                 labels: [],
                 datasets: [
                     {
-                        label: 'Produção Real',
+                        label: 'Caixas separadas',
                         data: [],
                         borderColor: '#0d6efd',
                         backgroundColor: 'rgba(13, 110, 253, 0.1)',
@@ -774,7 +774,7 @@
                         pointRadius: 0
                     },
                     {
-                        label: 'Meta',
+                        label: 'Meta 11.000 caixas',
                         data: [],
                         borderColor: '#dc3545',
                         borderDash: [2, 2],
@@ -799,7 +799,8 @@
                     tooltip: {
                         callbacks: {
                             label: function(ctx) {
-                                return ctx.dataset.label + ': ' + ctx.formattedValue;
+                                const valor = Number(ctx.raw || 0).toLocaleString('pt-BR');
+                                return ctx.dataset.label + ': ' + valor + ' caixas';
                             }
                         }
                     },
@@ -814,7 +815,12 @@
                     y: { 
                         beginAtZero: true,
                         grid: { color: '#eef1f5' },
-                        ticks: { color: '#64748b' }
+                        ticks: {
+                            color: '#64748b',
+                            callback: function(value) {
+                                return Number(value).toLocaleString('pt-BR');
+                            }
+                        }
                     },
                     x: {
                         grid: { color: '#eef1f5' },
@@ -826,7 +832,7 @@
 
         async function atualizarGrafico() {
             try {
-                const resp = await fetch("{{ url('/api/dashboard/projecao-produtividade') }}");
+                const resp = await fetch("{{ route('dashboard.projecaoProdutividade') }}");
                 const data = await resp.json();
 
                 // Labels (horas)
@@ -862,7 +868,7 @@
         const ctx = document.getElementById('gaugeVelocidade').getContext('2d');
 
         try {
-            const resp = await fetch("{{ url('/api/dashboard/projecao-produtividade') }}");
+            const resp = await fetch("{{ route('dashboard.projecaoProdutividade') }}");
             const data = await resp.json();
 
             const velAtual = data.velocidadeAtual || 0;

@@ -477,6 +477,8 @@ Route::post('/setores/conferencia/{id}/salvar-foto', [ConferenciaController::cla
 Route::middleware(['auth'])->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/dashboard/projecao-produtividade', [DashboardController::class, 'projecaoProdutividade'])
+        ->name('dashboard.projecaoProdutividade');
 });
 
 Route::middleware(['auth', 'admin'])->group(function () {

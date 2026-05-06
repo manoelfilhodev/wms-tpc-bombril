@@ -432,106 +432,102 @@ class DashboardService
         ];
     }
     
-public function getProjecaoProdutividade()
+public function getProjecaoProdutividade($dataReferencia = null)
 {
-    $hoje = Carbon::today();
+    $hoje = $dataReferencia
+        ? Carbon::parse($dataReferencia)->startOfDay()
+        : Carbon::today();
+    $agora = Carbon::now();
+    $meta = 11000;
+    $metaPorHora = 1000;
+    $horaInicio = $hoje->copy()->setTime(12, 0, 0);
+    $horaFim = $hoje->copy()->setTime(23, 0, 0);
 
-    // 🔹 Meta = total de etiquetas geradas (GERADO + APONTADO)
-    $meta = DB::table('_tb_apontamentos_kits')
-        ->whereDate('data', $hoje)
-        ->whereIn('status', ['GERADO', 'APONTADO'])
-        ->count();
-
-    // 🔹 Turno (06h às 22h) com 2h de pausa
-    $horaInicio = Carbon::today()->setTime(6, 0, 0);
-    $horaFim = Carbon::today()->setTime(22, 0, 0);
-    $horasUteis = ($horaFim->diffInMinutes($horaInicio) - 120) / 60;
-
-    $intervalo = $horaInicio->copy();
     $curvaIdeal = [];
     $acumulado = [];
+    $projecaoCorrigida = [];
 
-    while ($intervalo <= $horaFim) {
-        // Percentual do tempo decorrido em relação ao turno
-        $percentual = $horaInicio->diffInMinutes($intervalo) / $horaInicio->diffInMinutes($horaFim);
+    $fimProducaoReal = $hoje->isSameDay($agora)
+        ? ($agora->lessThan($horaInicio)
+        ? $horaInicio->copy()
+        : ($agora->greaterThan($horaFim) ? $horaFim->copy() : $agora->copy()))
+        : ($hoje->lessThan($agora->copy()->startOfDay()) ? $horaFim->copy() : $horaInicio->copy());
 
-        // Curva ideal
+    $produzido = (int) DB::table('_tb_demanda')
+        ->whereNotNull('separacao_finalizada_em')
+        ->whereBetween('separacao_finalizada_em', [$horaInicio, $fimProducaoReal])
+        ->sum('quantidade');
+
+    $tempoDecorridoHoras = $fimProducaoReal->greaterThan($horaInicio)
+        ? min($horaInicio->diffInMinutes($fimProducaoReal) / 60, 11)
+        : 0;
+
+    $velocidadeAtual = $tempoDecorridoHoras > 0
+        ? round($produzido / $tempoDecorridoHoras, 2)
+        : 0;
+
+    $velocidadeNecessaria = $produzido >= $meta ? 0 : $metaPorHora;
+    $progresso = $metaPorHora > 0 ? $velocidadeAtual / $metaPorHora : 0;
+
+    if ($produzido >= $meta || $progresso >= 1) {
+        $statusProdutividade = 'ok';
+    } elseif ($progresso >= 0.8) {
+        $statusProdutividade = 'atencao';
+    } else {
+        $statusProdutividade = 'baixo';
+    }
+
+    $previsaoConclusao = null;
+    if ($velocidadeAtual > 0) {
+        $horasParaMeta = $meta / $velocidadeAtual;
+        $previsao = $horaInicio->copy()->addMinutes((int) round($horasParaMeta * 60));
+        $previsaoConclusao = $previsao->lessThanOrEqualTo($horaFim) ? $previsao->format('H:i') : null;
+    }
+
+    for ($intervalo = $horaInicio->copy(); $intervalo <= $horaFim; $intervalo->addHour()) {
+        $horasMeta = (int) $horaInicio->diffInHours($intervalo);
+        $acumuladoIdeal = min($meta, $horasMeta * $metaPorHora);
+
         $curvaIdeal[] = [
             'hora' => $intervalo->format('H:i'),
-            'valor' => round($meta * $percentual)
+            'valor' => $acumuladoIdeal,
         ];
 
-        // Produção real acumulada (apenas APONTADO)
-        $count = DB::table('_tb_apontamentos_kits')
-            ->whereDate('data', $hoje)
-            ->whereTime('updated_at', '<=', $intervalo->format('H:i:s'))
-            ->where('status', 'APONTADO')
-            ->count();
+        $acumuladoReal = null;
+        if ($intervalo->lessThanOrEqualTo($fimProducaoReal)) {
+            $acumuladoReal = (int) DB::table('_tb_demanda')
+                ->whereNotNull('separacao_finalizada_em')
+                ->whereBetween('separacao_finalizada_em', [$horaInicio, $intervalo])
+                ->sum('quantidade');
+        }
 
         $acumulado[] = [
             'hora' => $intervalo->format('H:i'),
-            'acumulado' => $count,
+            'acumulado' => $acumuladoReal,
         ];
 
-        $intervalo->addMinutes(30);
-    }
-
-    // 🔹 Produzido até agora
-    $produzido = end($acumulado)['acumulado'] ?? 0;
-
-    // 🔹 Velocidade atual e necessária
-    $agora = Carbon::now();
-    $tempoDecorrido = max(1, $horaInicio->diffInMinutes($agora) / 60); // em horas
-    $velocidadeAtual = $produzido > 0 ? round($produzido / $tempoDecorrido, 2) : 0;
-
-    // Se já atingiu a meta, velocidade necessária = 0
-    if ($produzido >= $meta) {
-        $velocidadeNecessaria = 0;
-        $statusProdutividade = 'ok'; // já bateu a meta
-    } else {
-        $velocidadeNecessaria = $meta > 0 ? round($meta / $horasUteis, 2) : 0;
-
-        // Classificação do status
-        $progresso = $velocidadeNecessaria > 0 ? $velocidadeAtual / $velocidadeNecessaria : 0;
-        if ($progresso >= 1) {
-            $statusProdutividade = 'ok';      // verde
-        } elseif ($progresso >= 0.8) {
-            $statusProdutividade = 'atencao'; // amarelo
-        } else {
-            $statusProdutividade = 'baixo';   // vermelho
+        $valorProjetado = null;
+        if ($velocidadeAtual > 0 && $intervalo->greaterThan($fimProducaoReal)) {
+            $horasProjetadas = $horaInicio->diffInMinutes($intervalo) / 60;
+            $valorProjetado = min($meta, (int) round($velocidadeAtual * $horasProjetadas));
         }
-    }
 
-    // 🔹 Projeção corrigida
-    $projecaoCorrigida = [];
-    if ($produzido < $meta) {
-        $ultimo = end($acumulado);
-        $ultimoHorario = Carbon::today()->setTimeFromTimeString($ultimo['hora']);
-        $tempoRestante = $ultimoHorario->diffInMinutes($horaFim);
-
-        if ($tempoRestante > 0 && $tempoDecorrido > 0) {
-            $ritmoMedio = $produzido / ($tempoDecorrido * 60); // paletes/minuto
-            $intervalo = $ultimoHorario->copy();
-
-            while ($intervalo <= $horaFim) {
-                $tempoProjecao = $horaInicio->diffInMinutes($intervalo);
-                $projecaoCorrigida[] = [
-                    'hora' => $intervalo->format('H:i'),
-                    'valor' => round($ritmoMedio * $tempoProjecao, 0)
-                ];
-                $intervalo->addMinutes(30);
-            }
-        }
+        $projecaoCorrigida[] = [
+            'hora' => $intervalo->format('H:i'),
+            'valor' => $valorProjetado,
+        ];
     }
 
     return [
         'meta' => $meta,
+        'metaPorHora' => $metaPorHora,
         'produzido' => $produzido,
         'apontamentos' => $acumulado,
         'curvaIdeal' => $curvaIdeal,
         'projecaoCorrigida' => $projecaoCorrigida,
         'velocidadeNecessaria' => $velocidadeNecessaria,
         'velocidadeAtual' => $velocidadeAtual,
+        'previsaoConclusao' => $previsaoConclusao,
         'statusProdutividade' => $statusProdutividade,
     ];
 }

@@ -103,6 +103,28 @@
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h6 class="mb-0">Projeção de Produtividade (caixas)</h6>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-light text-dark border">
+                            Separado: {{ number_format($dadosGraficos['projecaoProdutividade']['produzido'] ?? 0, 0, ',', '.') }}
+                        </span>
+                        <span class="badge bg-light text-dark border">
+                            Meta: {{ number_format($dadosGraficos['projecaoProdutividade']['meta'] ?? 11000, 0, ',', '.') }}
+                        </span>
+                        @if (!empty($dadosGraficos['projecaoProdutividade']['previsaoConclusao']))
+                            <span class="badge bg-success">
+                                Previsão: {{ $dadosGraficos['projecaoProdutividade']['previsaoConclusao'] }}
+                            </span>
+                        @endif
+                    </div>
+                </div>
+                <div class="chart-box chart-box-wide"><canvas id="chartProjecaoProdutividade"></canvas></div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                     <h6 class="mb-0">Apontamentos Stretch por hora</h6>
                     <span class="badge bg-light text-dark border">
                         Total: {{ $dadosGraficos['stretchPorHora']['total'] ?? 0 }}
@@ -267,6 +289,96 @@
                 plugins: [ChartDataLabels]
             });
         }
+
+        const projecao = dadosGraficos.projecaoProdutividade || {};
+        const labelsProjecao = (projecao.curvaIdeal || []).map((item) => item.hora);
+        const formatCaixas = (value) => Number(value || 0).toLocaleString('pt-BR');
+
+        renderChart('chartProjecaoProdutividade', {
+            type: 'line',
+            data: {
+                labels: labelsProjecao,
+                datasets: [
+                    {
+                        label: 'Caixas separadas',
+                        data: (projecao.apontamentos || []).map((item) => item.acumulado),
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.12)',
+                        borderWidth: 3,
+                        pointRadius: 3,
+                        tension: .35,
+                        fill: true
+                    },
+                    {
+                        label: 'Curva ideal',
+                        data: (projecao.curvaIdeal || []).map((item) => item.valor),
+                        borderColor: '#16a34a',
+                        borderDash: [6, 4],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: .35,
+                        fill: false
+                    },
+                    {
+                        label: 'Projeção corrigida',
+                        data: (projecao.projecaoCorrigida || []).map((item) => item.valor),
+                        borderColor: '#f59e0b',
+                        borderDash: [10, 5],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: .35,
+                        fill: false
+                    },
+                    {
+                        label: 'Meta 11.000 caixas',
+                        data: labelsProjecao.map(() => projecao.meta || 11000),
+                        borderColor: '#ef4444',
+                        borderDash: [2, 2],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                ...commonOptions,
+                plugins: {
+                    ...commonOptions.plugins,
+                    datalabels: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.dataset.label}: ${formatCaixas(ctx.raw)} caixas`
+                        }
+                    }
+                },
+                scales: {
+                    ...commonOptions.scales,
+                    x: {
+                        ...commonOptions.scales.x,
+                        title: {
+                            display: true,
+                            text: 'Hora',
+                            color: baseTicks
+                        }
+                    },
+                    y: {
+                        ...commonOptions.scales.y,
+                        title: {
+                            display: true,
+                            text: 'Caixas',
+                            color: baseTicks
+                        },
+                        ticks: {
+                            color: baseTicks,
+                            callback: (value) => formatCaixas(value)
+                        },
+                        suggestedMax: projecao.meta || 11000
+                    }
+                }
+            }
+        });
 
         renderChart('chartStretchHora', {
             type: 'bar',

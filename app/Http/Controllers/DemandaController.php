@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Exports\DemandasExport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\DemandaHistory;
+use App\Services\DashboardService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
@@ -678,7 +679,10 @@ public function dashboardOperacional()
 
     $createdDateExpr = $this->dateExpr('created_at');
     $finalizedDateExpr = $this->dateExpr('separacao_finalizada_em');
-    $labels7 = collect(range(6, 0))->map(fn($d) => now()->subDays($d)->format('Y-m-d'));
+    $dataBaseGraficos = Carbon::parse($data);
+    $inicioEvolucao = $dataBaseGraficos->copy()->subDays(6)->startOfDay();
+    $fimEvolucao = $dataBaseGraficos->copy()->endOfDay();
+    $labels7 = collect(range(6, 0))->map(fn($d) => $dataBaseGraficos->copy()->subDays($d)->format('Y-m-d'));
 
     $finalizadasNoDia = Demanda::query()
         ->where('possui_sobra', true)
@@ -687,7 +691,7 @@ public function dashboardOperacional()
             $this->aplicarFiltroTurnoSql($q, 'separacao_iniciada_em', $turno);
         })
         ->whereRaw("{$createdDateExpr} = {$finalizedDateExpr}")
-        ->whereDate('created_at', '>=', now()->subDays(6)->toDateString())
+        ->whereBetween('created_at', [$inicioEvolucao, $fimEvolucao])
         ->selectRaw("{$createdDateExpr} as dia")
         ->selectRaw('COUNT(*) as total')
         ->groupBy('dia')
@@ -701,7 +705,7 @@ public function dashboardOperacional()
             $this->aplicarFiltroTurnoSql($q, 'separacao_iniciada_em', $turno);
         })
         ->whereRaw("{$createdDateExpr} <> {$finalizedDateExpr}")
-        ->whereDate('created_at', '>=', now()->subDays(6)->toDateString())
+        ->whereBetween('created_at', [$inicioEvolucao, $fimEvolucao])
         ->selectRaw("{$createdDateExpr} as dia")
         ->selectRaw('COUNT(*) as total')
         ->groupBy('dia')
@@ -713,8 +717,10 @@ public function dashboardOperacional()
     $seriesFinalizadasNoDia = $labels7->map(fn($dia) => (int) ($mapFinalizadasNoDia[$dia] ?? 0));
     $seriesFinalizadasOutroDia = $labels7->map(fn($dia) => (int) ($mapFinalizadasOutroDia[$dia] ?? 0));
     $apontamentosStretchPorHora = $this->getApontamentosStretchPorHora($data, $turno);
+    $projecaoProdutividade = app(DashboardService::class)->getProjecaoProdutividade($data);
 
     $dadosGraficos = [
+        'projecaoProdutividade' => $projecaoProdutividade,
         'status' => [
             'labels' => ['A separar', 'Separando', 'Finalizado parcial', 'Finalizado completo'],
             'values' => [
