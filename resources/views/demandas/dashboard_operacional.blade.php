@@ -107,15 +107,20 @@
                 <h2 class="accordion-header" id="headingMeta">
                     <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMeta"
                         aria-expanded="true" aria-controls="collapseMeta">
-                        <div class="w-100 d-flex flex-wrap justify-content-between align-items-center gap-2 pe-3">
+                        <div class="w-100 d-flex justify-content-between align-items-center pe-3">
                             <div>
                                 <strong>Visão da Meta — 12h às 23:59</strong>
                                 <small class="d-block text-muted">Meta oficial, projeção, produção por hora e ranking da
                                     janela operacional.</small>
                             </div>
-                            <span class="badge bg-light text-dark border">
-                                Separado: <span id="badgeSeparadoMeta">0</span>
-                            </span>
+                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+
+
+                                <span class="badge bg-light text-dark border">
+                                    Separado:
+                                    <span class="badgeSeparadoMeta">0</span>
+                                </span>
+                            </div>
                         </div>
                     </button>
                 </h2>
@@ -486,23 +491,69 @@
             if (el) el.innerText = `Total: ${formatCaixas(total || 0)}`;
         }
 
+        function filtrarStackedPorHora(source, horaInicio = 12) {
+            const labelsOriginais = source.labels || [];
+            const indicesValidos = labelsOriginais
+                .map((label, index) => {
+                    const hora = parseInt(String(label || '00:00').split(':')[0], 10);
+                    return hora >= horaInicio ? index : null;
+                })
+                .filter((index) => index !== null);
+
+            const labels = indicesValidos.map((index) => labelsOriginais[index]);
+
+            const datasets = (source.datasets || []).map((dataset) => ({
+                ...dataset,
+                data: indicesValidos.map((index) => Number((dataset.data || [])[index] || 0))
+            }));
+
+            const total = datasets.reduce((soma, dataset) => {
+                return soma + (dataset.data || []).reduce((sub, value) => sub + Number(value || 0), 0);
+            }, 0);
+
+            return {
+                labels,
+                datasets,
+                total
+            };
+        }
+
         const projecao = dadosGraficos.projecaoProdutividade || {};
         const horaInicioMeta = 12;
 
-        function filtrarJanelaMeta(items) {
-            return (items || []).filter((item) => {
-                const hora = parseInt(String(item.hora || '00:00').split(':')[0], 10);
-                return hora >= horaInicioMeta;
-            });
+        function getHora(item) {
+            return parseInt(String(item.hora || '00:00').split(':')[0], 10);
         }
 
-        // 🔥 AQUI ESTÁ A CORREÇÃO
+        function filtrarJanelaMeta(items) {
+            return (items || []).filter((item) => getHora(item) >= horaInicioMeta);
+        }
+
         const curvaIdealMeta = filtrarJanelaMeta(projecao.curvaIdeal);
-        const apontamentosMeta = filtrarJanelaMeta(projecao.apontamentos);
+        const apontamentosTodos = projecao.apontamentos || [];
+        const apontamentosMeta = filtrarJanelaMeta(apontamentosTodos);
         const projecaoCorrigidaMeta = filtrarJanelaMeta(projecao.projecaoCorrigida);
 
+        const baseAntesDaMeta = (() => {
+            const pontosAntesDas12 = apontamentosTodos.filter((item) => getHora(item) < horaInicioMeta);
+
+            if (pontosAntesDas12.length > 0) {
+                return Number(pontosAntesDas12[pontosAntesDas12.length - 1].acumulado || 0);
+            }
+
+            return Number(apontamentosMeta[0]?.acumulado || 0);
+        })();
+
         const labelsProjecao = curvaIdealMeta.map((item) => item.hora);
-        const valoresReaisProjecao = apontamentosMeta.map((item) => item.acumulado);
+
+        const valoresReaisProjecao = apontamentosMeta.map((item) => {
+            const valor = Number(item.acumulado || 0) - baseAntesDaMeta;
+            return valor > 0 ? valor : 0;
+        });
+
+        const produzidoMeta = valoresReaisProjecao.length ?
+            Number(valoresReaisProjecao[valoresReaisProjecao.length - 1] || 0) :
+            0;
 
         document.querySelectorAll('.badgeSeparadoMeta').forEach((el) => {
             el.innerText = formatCaixas(produzidoMeta);
@@ -766,11 +817,15 @@
             });
         }
 
-        const separacaoHoraOperador = dadosGraficos.separacaoHoraOperador || {
+        const separacaoHoraOperadorOriginal = dadosGraficos.separacaoHoraOperador || {
             labels: [],
             datasets: [],
             total: 0
         };
+
+        const separacaoHoraOperador = filtrarStackedPorHora(separacaoHoraOperadorOriginal, 12);
+
+        renderSeparacaoHoraOperador('chartSeparacaoHoraOperador', separacaoHoraOperador);
 
         renderSeparacaoHoraOperador('chartSeparacaoHoraOperador', separacaoHoraOperador);
 
