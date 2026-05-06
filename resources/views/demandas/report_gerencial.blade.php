@@ -31,11 +31,32 @@
             <h3 class="mb-1">Report Gerencial da Operação</h3>
             <p class="mb-0">Visão executiva para acompanhamento de volume, SLA, backlog e produtividade.</p>
         </div>
-        <div class="manager-period">
-            <span>{{ $inicio->format('d/m/Y') }}</span>
-            <small>até</small>
-            <span>{{ $fim->format('d/m/Y') }}</span>
+        <div class="manager-actions">
+            <div class="manager-period">
+                <span>{{ $inicio->format('d/m/Y') }}</span>
+                <small>até</small>
+                <span>{{ $fim->format('d/m/Y') }}</span>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-light" id="btnCopiarWhatsapp">
+                    <i class="mdi mdi-content-copy me-1"></i> Copiar WhatsApp
+                </button>
+                <a class="btn btn-sm btn-success" id="btnAbrirWhatsapp" target="_blank" rel="noopener">
+                    <i class="mdi mdi-whatsapp me-1"></i> Abrir WhatsApp
+                </a>
+            </div>
         </div>
+    </div>
+
+    <div class="manager-whatsapp mb-4">
+        <div class="panel-title mb-2">
+            <div>
+                <h5>Resumo para WhatsApp</h5>
+                <small>Texto pronto para copiar ou abrir no WhatsApp.</small>
+            </div>
+            <span class="copy-feedback" id="copyFeedback" aria-live="polite"></span>
+        </div>
+        <textarea id="whatsappResumo" class="form-control" rows="12" readonly>{{ $mensagemWhatsapp }}</textarea>
     </div>
 
     <div class="manager-filter mb-4">
@@ -252,6 +273,7 @@
     .manager-hero,
     .manager-filter,
     .manager-panel,
+    .manager-whatsapp,
     .metric-card {
         background: var(--manager-panel);
         border: 1px solid var(--manager-border);
@@ -306,16 +328,39 @@
 
     .manager-filter,
     .manager-panel,
+    .manager-whatsapp,
     .metric-card {
         border-radius: 8px;
         padding: 18px;
     }
 
+    .manager-actions {
+        align-items: flex-end;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
     .manager-filter .form-control,
-    .manager-filter .form-select {
+    .manager-filter .form-select,
+    .manager-whatsapp textarea {
         background-color: #0f172a;
         border-color: rgba(148, 163, 184, 0.28);
         color: #f8fafc;
+    }
+
+    .manager-whatsapp textarea {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 13px;
+        line-height: 1.55;
+        resize: vertical;
+    }
+
+    .copy-feedback {
+        color: #86efac;
+        font-size: 12px;
+        font-weight: 800;
+        min-height: 18px;
     }
 
     .metric-card {
@@ -456,6 +501,11 @@
             flex-direction: column;
         }
 
+        .manager-actions {
+            align-items: flex-start;
+            width: 100%;
+        }
+
         .manager-period,
         .trend-badge {
             white-space: normal;
@@ -473,11 +523,54 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const dados = @json($dadosGraficos);
+    const mensagemWhatsapp = @json($mensagemWhatsapp);
     const gridColor = 'rgba(148, 163, 184, 0.18)';
     const textColor = '#cbd5e1';
+    const resumoTextarea = document.getElementById('whatsappResumo');
+    const btnCopiarWhatsapp = document.getElementById('btnCopiarWhatsapp');
+    const btnAbrirWhatsapp = document.getElementById('btnAbrirWhatsapp');
+    const copyFeedback = document.getElementById('copyFeedback');
 
     Chart.defaults.color = textColor;
     Chart.defaults.font.family = 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+    if (btnAbrirWhatsapp) {
+        btnAbrirWhatsapp.href = 'https://wa.me/?text=' + encodeURIComponent(mensagemWhatsapp);
+    }
+
+    function showCopyFeedback(message) {
+        if (!copyFeedback) {
+            return;
+        }
+
+        copyFeedback.textContent = message;
+        window.setTimeout(function () {
+            copyFeedback.textContent = '';
+        }, 2600);
+    }
+
+    async function copyWhatsappText() {
+        const text = resumoTextarea ? resumoTextarea.value : mensagemWhatsapp;
+
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+            } else if (resumoTextarea) {
+                resumoTextarea.focus();
+                resumoTextarea.select();
+                document.execCommand('copy');
+                resumoTextarea.setSelectionRange(0, 0);
+            }
+
+            showCopyFeedback('Resumo copiado.');
+        } catch (error) {
+            showCopyFeedback('Selecione o texto e copie manualmente.');
+        }
+    }
+
+    if (btnCopiarWhatsapp) {
+        btnCopiarWhatsapp.addEventListener('click', copyWhatsappText);
+    }
 
     new Chart(document.getElementById('chartEvolucaoGerencial'), {
         type: 'line',

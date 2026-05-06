@@ -1486,6 +1486,48 @@ class DemandaController extends Controller
             $pontosAtencao->push('Operação sem alertas críticos nos indicadores principais do período.');
         }
 
+        $turnoLabel = $turno ? ($turnos[$turno]['label'] ?? $turno) : 'Todos';
+        $separadorLabel = $separador !== '' ? mb_strtoupper($separador) : 'Todos';
+        $whatsappLinhas = [
+            '*REPORT GERENCIAL DA OPERAÇÃO*',
+            'Período: ' . $inicio->format('d/m/Y') . ' até ' . $fim->format('d/m/Y'),
+            "Turno: {$turnoLabel}",
+            "Separador: {$separadorLabel}",
+            '',
+            '*Resumo executivo*',
+            'DTs criadas: ' . number_format($resumo['criadas'], 0, ',', '.'),
+            'DTs finalizadas: ' . number_format($resumo['finalizadas'], 0, ',', '.'),
+            'Conclusão: ' . number_format($resumo['percentual_conclusao'], 1, ',', '.') . '%',
+            'SLA mesmo dia: ' . number_format($resumo['sla_no_dia'], 1, ',', '.') . '%',
+            'Backlog aberto: ' . number_format($resumo['backlog_aberto'], 0, ',', '.'),
+            'Caixas/peças: ' . number_format($resumo['pecas'], 0, ',', '.'),
+            'SKUs: ' . number_format($resumo['skus'], 0, ',', '.'),
+            'Tempo médio: ' . ($resumo['tempo_medio_min'] !== null ? number_format($resumo['tempo_medio_min'], 1, ',', '.') . ' min' : '-'),
+            '',
+            '*Produtividade - Top 5*',
+        ];
+
+        $topWhatsapp = $produtividade->take(5);
+        if ($topWhatsapp->isEmpty()) {
+            $whatsappLinhas[] = '- Sem apontamentos finalizados no período.';
+        } else {
+            foreach ($topWhatsapp->values() as $idx => $linha) {
+                $posicao = $idx + 1;
+                $whatsappLinhas[] = "{$posicao}. {$linha['separador']} - "
+                    . number_format($linha['pecas'], 0, ',', '.') . ' caixas | '
+                    . number_format($linha['dts'], 0, ',', '.') . ' DTs | '
+                    . number_format($linha['participacao'], 1, ',', '.') . '%';
+            }
+        }
+
+        $whatsappLinhas[] = '';
+        $whatsappLinhas[] = '*Pontos de atenção*';
+        foreach ($pontosAtencao->take(4) as $item) {
+            $whatsappLinhas[] = '- ' . $item;
+        }
+
+        $mensagemWhatsapp = implode("\n", $whatsappLinhas);
+
         $dadosGraficos = [
             'evolucao' => [
                 'labels' => $labelsPeriodo->map(fn($dia) => Carbon::parse($dia)->format('d/m'))->values(),
@@ -1521,6 +1563,7 @@ class DemandaController extends Controller
             'produtividade' => $produtividade,
             'pontosAtencao' => $pontosAtencao,
             'dadosGraficos' => $dadosGraficos,
+            'mensagemWhatsapp' => $mensagemWhatsapp,
         ]);
     }
 
