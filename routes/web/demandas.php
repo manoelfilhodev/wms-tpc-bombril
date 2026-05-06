@@ -26,6 +26,7 @@ Route::prefix('demandas')->middleware(['auth'])->group(function () {
     Route::post('/{id}/finalizar-separacao', [DemandaController::class, 'finalizarSeparacao'])->middleware('demanda.perfil:operacional')->name('demandas.finalizarSeparacao');
     Route::post('/{id}/finalizar-separador', [DemandaController::class, 'finalizarSeparador'])->middleware('demanda.perfil:operacional')->name('demandas.finalizarSeparador');
     Route::post('/{id}/distribuir', [DemandaController::class, 'distribuirDt'])->middleware('demanda.perfil:operacional')->name('demandas.distribuir');
+    Route::patch('/{id}/distribuicoes/{distribuicao}/redistribuir', [DemandaController::class, 'redistribuirDistribuicao'])->middleware('demanda.perfil:operacional')->name('demandas.redistribuirDistribuicao');
     Route::patch('/{id}/stage', [DemandaController::class, 'updateStage'])->middleware('demanda.perfil:operacional')->name('demandas.updateStage');
 });
 

@@ -405,7 +405,7 @@
             $skusRestantes = max(0, $totalSkusPicking - $totalSkusDistribuidos);
         @endphp
         <div class="modal fade" id="modalDistribuicao{{ $d->id }}" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable demanda-distribuicao-modal">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title">Distribuição da DT {{ $d->fo }}</h5>
@@ -427,7 +427,12 @@
                             </div>
                             <div class="col-md-3">
                                 <div class="small text-muted">Saldo</div>
-                                <div class="fw-semibold">{{ $restante }} peças / {{ $skusRestantes }} SKUs</div>
+                                <div class="fw-semibold">
+                                    <span class="saldo-pecas-live" data-original="{{ $restante }}">{{ $restante }}</span>
+                                    peças /
+                                    <span class="saldo-skus-live" data-original="{{ $skusRestantes }}">{{ $skusRestantes }}</span>
+                                    SKUs
+                                </div>
                             </div>
                         </div>
 
@@ -462,44 +467,63 @@
                             </div>
                         </div>
 
-                        <form method="POST" action="{{ route('demandas.distribuir', $d->id) }}" class="row g-2 mb-3">
+                        <form method="POST" action="{{ route('demandas.distribuir', $d->id) }}"
+                            class="distribuicao-form mb-3" data-next-index="1"
+                            data-restante="{{ $restante }}" data-skus-restantes="{{ $skusRestantes }}">
                             @csrf
-                            <div class="col-md-5">
-                                <label class="form-label small text-muted mb-1">Nome do separador</label>
-                                <select name="separador_nome" class="form-select form-select-sm separador-select"
-                                    required>
-                                    <option value=""></option>
-                                </select>
+                            <div class="distribuicao-entries d-grid gap-2">
+                                <div class="distribuicao-entry row g-2 align-items-end">
+                                    <div class="col-lg-5 col-md-12">
+                                        <label class="form-label small text-muted mb-1">Nome do separador</label>
+                                        <select name="distribuicoes[0][separador_nome]"
+                                            class="form-select form-select-sm separador-select" required>
+                                            <option value=""></option>
+                                        </select>
+                                    </div>
+                                    <div class="col-lg-2 col-md-4">
+                                        <label class="form-label small text-muted mb-1">Qtd peças</label>
+                                        <input type="number" name="distribuicoes[0][quantidade_pecas]" min="1"
+                                            max="{{ $restante }}"
+                                            class="form-control form-control-sm quantidade-pecas-input" required>
+                                    </div>
+                                    <div class="col-lg-2 col-md-4">
+                                        <label class="form-label small text-muted mb-1">Qtd SKUs</label>
+                                        <input type="number" name="distribuicoes[0][quantidade_skus]" min="1"
+                                            max="{{ $skusRestantes }}"
+                                            class="form-control form-control-sm quantidade-skus-input" required>
+                                    </div>
+                                    <div class="col-lg-3 col-md-4">
+                                        <label class="form-label small text-muted mb-1 d-none d-lg-block">&nbsp;</label>
+                                        <div class="d-flex gap-2">
+                                            <button type="button"
+                                                class="btn btn-sm btn-outline-primary btn-add-distribuicao-row"
+                                                title="Adicionar separador" aria-label="Adicionar separador">
+                                                <i class="mdi mdi-plus"></i>
+                                            </button>
+                                            <button type="submit" class="btn btn-sm btn-primary flex-fill">Distribuir</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label small text-muted mb-1">Qtd peças</label>
-                                <input type="number" name="quantidade_pecas" min="1" max="{{ $restante }}"
-                                    class="form-control form-control-sm" required>
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label small text-muted mb-1">Qtd SKUs</label>
-                                <input type="number" name="quantidade_skus" min="1" max="{{ $skusRestantes }}"
-                                    class="form-control form-control-sm" required>
-                            </div>
-                            <div class="col-md-2 d-flex align-items-end">
-                                <button type="submit" class="btn btn-sm btn-primary w-100">Distribuir</button>
+                            <div class="saldo-preview-warning small text-danger mt-2 d-none">
+                                A distribuição informada ultrapassa o saldo disponível.
                             </div>
                         </form>
 
                         @php
                             $distribuicoesPorSeparador = $d->distribuicoes
-                                ->groupBy('separador_nome')
-                                ->map(function ($itens) {
-                                    $inicio = $itens->min('created_at');
-                                    $fim = $itens->whereNotNull('finalizado_em')->max('finalizado_em');
-                                    $resultado = $itens->whereNotNull('resultado')->last()?->resultado;
+                                ->sortBy('created_at')
+                                ->map(function ($item) {
+                                    $inicio = $item->created_at;
+                                    $fim = $item->finalizado_em;
                                     return [
-                                        'separador_nome' => $itens->first()->separador_nome,
-                                        'quantidade_pecas' => (int) $itens->sum('quantidade_pecas'),
-                                        'quantidade_skus' => (int) $itens->sum('quantidade_skus'),
+                                        'id' => $item->id,
+                                        'separador_nome' => $item->separador_nome,
+                                        'quantidade_pecas' => (int) $item->quantidade_pecas,
+                                        'quantidade_skus' => (int) $item->quantidade_skus,
                                         'inicio' => $inicio ? \Carbon\Carbon::parse($inicio) : null,
                                         'fim' => $fim ? \Carbon\Carbon::parse($fim) : null,
-                                        'resultado' => $resultado,
+                                        'resultado' => $item->resultado,
                                     ];
                                 })
                                 ->values();
@@ -521,10 +545,43 @@
                                 </thead>
                                 <tbody>
                                     @forelse($distribuicoesPorSeparador as $dist)
+                                        @php
+                                            $formRedistribuirId = "form-redistribuir-{$d->id}-{$dist['id']}";
+                                            $limiteRedistribuirPecas = $dist['fim'] ? $dist['quantidade_pecas'] : $dist['quantidade_pecas'] + $restante;
+                                            $limiteRedistribuirSkus = $dist['fim'] ? $dist['quantidade_skus'] : $dist['quantidade_skus'] + $skusRestantes;
+                                        @endphp
                                         <tr>
                                             <td>{{ $dist['separador_nome'] }}</td>
-                                            <td class="text-end">{{ $dist['quantidade_pecas'] }}</td>
-                                            <td class="text-end">{{ $dist['quantidade_skus'] }}</td>
+                                            <td class="text-end">
+                                                @if (!$dist['fim'])
+                                                    <form id="{{ $formRedistribuirId }}"
+                                                        action="{{ route('demandas.redistribuirDistribuicao', [$d->id, $dist['id']]) }}"
+                                                        method="POST">
+                                                        @csrf
+                                                        @method('PATCH')
+                                                    </form>
+                                                    <input form="{{ $formRedistribuirId }}" type="number"
+                                                        name="quantidade_pecas" min="0"
+                                                        max="{{ $limiteRedistribuirPecas }}"
+                                                        value="{{ $dist['quantidade_pecas'] }}"
+                                                        class="form-control form-control-sm text-end"
+                                                        style="min-width: 86px">
+                                                @else
+                                                    {{ $dist['quantidade_pecas'] }}
+                                                @endif
+                                            </td>
+                                            <td class="text-end">
+                                                @if (!$dist['fim'])
+                                                    <input form="{{ $formRedistribuirId }}" type="number"
+                                                        name="quantidade_skus" min="0"
+                                                        max="{{ $limiteRedistribuirSkus }}"
+                                                        value="{{ $dist['quantidade_skus'] }}"
+                                                        class="form-control form-control-sm text-end"
+                                                        style="min-width: 76px">
+                                                @else
+                                                    {{ $dist['quantidade_skus'] }}
+                                                @endif
+                                            </td>
                                             <td class="text-end">{{ $dist['inicio']?->format('d/m/Y H:i') ?? '-' }}</td>
                                             <td class="text-end">{{ $dist['fim']?->format('d/m/Y H:i') ?? '-' }}</td>
                                             <td class="text-end">
@@ -549,6 +606,9 @@
                                             </td>
                                             <td class="text-end">
                                                 @if (!$dist['fim'])
+                                                    <div class="d-inline-flex gap-1">
+                                                        <button form="{{ $formRedistribuirId }}" type="submit"
+                                                            class="btn btn-sm btn-outline-primary">Redistribuir</button>
                                                     <form action="{{ route('demandas.finalizarSeparador', $d->id) }}"
                                                         method="POST" class="d-inline-flex gap-1">
                                                         @csrf
@@ -559,6 +619,7 @@
                                                         <button type="submit" name="resultado" value="COMPLETA"
                                                             class="btn btn-sm btn-success">Completa</button>
                                                     </form>
+                                                    </div>
                                                 @else
                                                     <span class="text-muted small">Finalizado</span>
                                                 @endif
@@ -603,15 +664,14 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {
-        $('.modal').on('shown.bs.modal', function() {
-            const modal = $(this);
-            const select = modal.find('.separador-select');
+        function initSeparadorSelect(select, modal) {
+            const field = $(select);
 
-            if (select.hasClass('select2-hidden-accessible')) {
-                select.select2('destroy');
+            if (field.hasClass('select2-hidden-accessible')) {
+                field.select2('destroy');
             }
 
-            select.select2({
+            field.select2({
                 width: '100%',
                 placeholder: 'Digite o nome ou chapa do separador',
                 dropdownParent: modal,
@@ -649,6 +709,113 @@
                     }
                 }
             });
+        }
+
+        function buildDistribuicaoRow(form, index) {
+            const restante = form.dataset.restante || '';
+            const skusRestantes = form.dataset.skusRestantes || '';
+
+            return `
+                <div class="distribuicao-entry row g-2 align-items-end">
+                    <div class="col-lg-5 col-md-12">
+                        <label class="form-label small text-muted mb-1">Nome do separador</label>
+                        <select name="distribuicoes[${index}][separador_nome]" class="form-select form-select-sm separador-select" required>
+                            <option value=""></option>
+                        </select>
+                    </div>
+                    <div class="col-lg-2 col-md-4">
+                        <label class="form-label small text-muted mb-1">Qtd peças</label>
+                        <input type="number" name="distribuicoes[${index}][quantidade_pecas]" min="1" max="${restante}" class="form-control form-control-sm quantidade-pecas-input" required>
+                    </div>
+                    <div class="col-lg-2 col-md-4">
+                        <label class="form-label small text-muted mb-1">Qtd SKUs</label>
+                        <input type="number" name="distribuicoes[${index}][quantidade_skus]" min="1" max="${skusRestantes}" class="form-control form-control-sm quantidade-skus-input" required>
+                    </div>
+                    <div class="col-lg-3 col-md-4">
+                        <label class="form-label small text-muted mb-1 d-none d-lg-block">&nbsp;</label>
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-remove-distribuicao-row w-100"
+                            title="Remover linha" aria-label="Remover linha">
+                            <i class="mdi mdi-close"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function readNumber(value) {
+            const number = Number(value);
+            return Number.isFinite(number) ? number : 0;
+        }
+
+        function updateSaldoPreview(form) {
+            const modal = form.closest('.modal');
+            const saldoPecas = modal.querySelector('.saldo-pecas-live');
+            const saldoSkus = modal.querySelector('.saldo-skus-live');
+            const warning = form.querySelector('.saldo-preview-warning');
+            const submitButton = form.querySelector('button[type="submit"]');
+            const totalPecas = [...form.querySelectorAll('.quantidade-pecas-input')]
+                .reduce((total, input) => total + readNumber(input.value), 0);
+            const totalSkus = [...form.querySelectorAll('.quantidade-skus-input')]
+                .reduce((total, input) => total + readNumber(input.value), 0);
+            const restantePecas = readNumber(form.dataset.restante) - totalPecas;
+            const restanteSkus = readNumber(form.dataset.skusRestantes) - totalSkus;
+            const excedeuSaldo = restantePecas < 0 || restanteSkus < 0;
+
+            saldoPecas.textContent = restantePecas;
+            saldoSkus.textContent = restanteSkus;
+            saldoPecas.classList.toggle('text-danger', excedeuSaldo);
+            saldoSkus.classList.toggle('text-danger', excedeuSaldo);
+            warning?.classList.toggle('d-none', !excedeuSaldo);
+
+            if (submitButton) {
+                submitButton.disabled = excedeuSaldo;
+            }
+        }
+
+        $('.modal').on('shown.bs.modal', function() {
+            const modal = $(this);
+
+            modal.find('.separador-select').each(function() {
+                initSeparadorSelect(this, modal);
+            });
+
+            modal.find('.distribuicao-form').each(function() {
+                updateSaldoPreview(this);
+            });
+        });
+
+        document.addEventListener('input', function(event) {
+            if (!event.target.matches('.quantidade-pecas-input, .quantidade-skus-input')) {
+                return;
+            }
+
+            updateSaldoPreview(event.target.closest('.distribuicao-form'));
+        });
+
+        document.addEventListener('click', function(event) {
+            const addButton = event.target.closest('.btn-add-distribuicao-row');
+            const removeButton = event.target.closest('.btn-remove-distribuicao-row');
+
+            if (addButton) {
+                const form = addButton.closest('.distribuicao-form');
+                const entries = form.querySelector('.distribuicao-entries');
+                const modal = $(form.closest('.modal'));
+                const nextIndex = Number(form.dataset.nextIndex || 1);
+
+                entries.insertAdjacentHTML('beforeend', buildDistribuicaoRow(form, nextIndex));
+                form.dataset.nextIndex = String(nextIndex + 1);
+
+                const newSelect = entries.lastElementChild.querySelector('.separador-select');
+                initSeparadorSelect(newSelect, modal);
+                updateSaldoPreview(form);
+                $(newSelect).select2('open');
+            }
+
+            if (removeButton) {
+                const form = removeButton.closest('.distribuicao-form');
+                removeButton.closest('.distribuicao-entry')?.remove();
+                updateSaldoPreview(form);
+            }
         });
     });
 </script>
@@ -842,6 +1009,12 @@
         .status-dot-primary { background: #0d6efd; }
         .status-dot-warning { background: #ffc107; }
         .status-dot-success { background: #198754; }
+
+        @media (min-width: 1200px) {
+            .demanda-distribuicao-modal {
+                max-width: min(1480px, calc(100vw - 48px));
+            }
+        }
 
         @media (max-width: 991.98px) {
             .filter-status-row {

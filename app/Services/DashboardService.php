@@ -443,23 +443,20 @@ class DashboardService
         $meta = 11000;
         $metaPorHora = 1000;
 
+        $inicioDia = $data->copy()->startOfDay();
         $inicioOperacao = $data->copy()->setTime(12, 0, 0);
         $fimOperacao = $data->copy()->endOfDay();
         $horaFimGrafico = $data->copy()->setTime(23, 0, 0);
 
         $fimProducaoReal = $data->isSameDay($agora)
             ? min($agora->copy(), $fimOperacao->copy())
-            : ($data->lessThan($agora->copy()->startOfDay()) ? $fimOperacao->copy() : $inicioOperacao->copy());
-
-        if ($fimProducaoReal->lessThan($inicioOperacao)) {
-            $fimProducaoReal = $inicioOperacao->copy();
-        }
+            : ($data->lessThan($agora->copy()->startOfDay()) ? $fimOperacao->copy() : $inicioDia->copy());
 
         $produzido = (int) DB::table('_tb_demanda_distribuicoes as dd')
             ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
             ->where('d.possui_sobra', true)
             ->whereNotNull('dd.finalizado_em')
-            ->whereBetween('dd.finalizado_em', [$inicioOperacao, $fimProducaoReal])
+            ->whereBetween('dd.finalizado_em', [$inicioDia, $fimProducaoReal])
             ->sum('dd.quantidade_pecas');
 
         $tempoDecorridoHoras = $fimProducaoReal->greaterThan($inicioOperacao)
@@ -494,10 +491,12 @@ class DashboardService
         $acumulado = [];
         $projecaoCorrigida = [];
 
-        for ($intervalo = $inicioOperacao->copy(); $intervalo <= $horaFimGrafico; $intervalo->addHour()) {
+        for ($intervalo = $inicioDia->copy(); $intervalo <= $horaFimGrafico; $intervalo->addHour()) {
             $horaLabel = $intervalo->format('H:i');
 
-            $horasMeta = (int) $inicioOperacao->diffInHours($intervalo);
+            $horasMeta = $intervalo->lessThan($inicioOperacao)
+                ? 0
+                : (int) $inicioOperacao->diffInHours($intervalo);
             $acumuladoIdeal = min($meta, $horasMeta * $metaPorHora);
 
             $curvaIdeal[] = [
@@ -522,7 +521,7 @@ class DashboardService
                     ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
                     ->where('d.possui_sobra', true)
                     ->whereNotNull('dd.finalizado_em')
-                    ->whereBetween('dd.finalizado_em', [$inicioOperacao, $fimIntervalo])
+                    ->whereBetween('dd.finalizado_em', [$inicioDia, $fimIntervalo])
                     ->sum('dd.quantidade_pecas');
             }
 

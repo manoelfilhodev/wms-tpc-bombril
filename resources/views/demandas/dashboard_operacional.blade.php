@@ -545,16 +545,10 @@
                 plugins: {
                     ...commonOptions.plugins,
                     datalabels: {
-                        display: (ctx) => {
-                            if (ctx.datasetIndex === 0) {
-                                return (ctx.raw || 0) > 0;
-                            }
-
-                            return isLastVisiblePoint(ctx);
-                        },
+                        display: (ctx) => ctx.datasetIndex === 0 && (ctx.raw || 0) > 0,
                         align: 'top',
                         anchor: 'end',
-                        color: (ctx) => ctx.dataset.borderColor,
+                        color: chartColors.real,
                         backgroundColor: 'rgba(255,255,255,.95)',
                         borderColor: 'rgba(148, 163, 184, 0.35)',
                         borderWidth: 1,
@@ -564,13 +558,7 @@
                             size: 10,
                             weight: '700'
                         },
-                        formatter: (value, ctx) => {
-                            if (ctx.datasetIndex === 0) {
-                                return formatCaixas(value);
-                            }
-
-                            return ctx.dataset.label;
-                        }
+                        formatter: (value) => formatCaixas(value)
                     },
                     tooltip: {
                         callbacks: {
@@ -810,23 +798,41 @@
             type: 'bar',
             data: {
                 labels: dadosGraficos.stretchPorHora.labels,
-                datasets: [{
-                    label: 'Apontamentos',
-                    data: dadosGraficos.stretchPorHora.values,
-                    backgroundColor: chartColors.real,
-                    borderRadius: 4,
-                    maxBarThickness: 42
-                }]
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: 'Apontamentos',
+                        data: dadosGraficos.stretchPorHora.values,
+                        backgroundColor: chartColors.real,
+                        borderRadius: 4,
+                        maxBarThickness: 42
+                    },
+                    {
+                        type: 'line',
+                        label: 'Meta Stretch/hora (45)',
+                        data: (dadosGraficos.stretchPorHora.labels || []).map(() => 45),
+                        borderColor: chartColors.target,
+                        backgroundColor: chartColors.targetSoft,
+                        borderDash: [5, 4],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0,
+                        fill: false
+                    }
+                ]
             },
             options: {
                 ...commonOptions,
                 plugins: {
                     ...commonOptions.plugins,
                     legend: {
-                        display: false
+                        display: true,
+                        labels: {
+                            color: baseTicks
+                        }
                     },
                     datalabels: {
-                        display: (ctx) => (ctx.raw || 0) > 0,
+                        display: (ctx) => ctx.datasetIndex === 0 && (ctx.raw || 0) > 0,
                         color: '#ffffff',
                         font: {
                             weight: '700',
@@ -836,7 +842,7 @@
                     },
                     tooltip: {
                         callbacks: {
-                            label: (ctx) => `Apontamentos: ${formatCaixas(ctx.parsed.y ?? ctx.raw)}`
+                            label: (ctx) => `${ctx.dataset.label}: ${formatCaixas(ctx.raw)}`
                         }
                     }
                 },

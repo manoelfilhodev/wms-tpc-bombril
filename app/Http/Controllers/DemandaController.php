@@ -453,11 +453,29 @@ class DemandaController extends Controller
 
     public function distribuirDt(Request $request, $id)
     {
-        $request->validate([
+        $usaMultiplasLinhas = $request->has('distribuicoes');
+        $dados = $request->validate($usaMultiplasLinhas ? [
+            'distribuicoes' => 'required|array|min:1',
+            'distribuicoes.*.separador_nome' => 'required|string|max:150',
+            'distribuicoes.*.quantidade_pecas' => 'required|integer|min:1',
+            'distribuicoes.*.quantidade_skus' => 'required|integer|min:1',
+        ] : [
             'separador_nome' => 'required|string|max:150',
             'quantidade_pecas' => 'required|integer|min:1',
             'quantidade_skus' => 'required|integer|min:1',
         ]);
+
+        $linhasDistribuicao = collect($usaMultiplasLinhas ? $dados['distribuicoes'] : [[
+            'separador_nome' => $dados['separador_nome'],
+            'quantidade_pecas' => $dados['quantidade_pecas'],
+            'quantidade_skus' => $dados['quantidade_skus'],
+        ]])->map(function ($linha) {
+            return [
+                'separador_nome' => trim($linha['separador_nome']),
+                'quantidade_pecas' => (int) $linha['quantidade_pecas'],
+                'quantidade_skus' => (int) $linha['quantidade_skus'],
+            ];
+        })->values();
 
         $demanda = Demanda::withCount(['itens as total_skus_picking' => function ($q) {
             $q->where('sobra', '>', 0)
@@ -476,8 +494,8 @@ class DemandaController extends Controller
         $skusDistribuidos = (int) ($demanda->total_skus_distribuidos ?? 0);
         $restante = max(0, $totalPicking - $distribuido);
         $skusRestantes = max(0, $totalSkusPicking - $skusDistribuidos);
-        $qtd = (int) $request->quantidade_pecas;
-        $qtdSkus = (int) $request->quantidade_skus;
+        $qtd = $linhasDistribuicao->sum('quantidade_pecas');
+        $qtdSkus = $linhasDistribuicao->sum('quantidade_skus');
 
         if ($totalPicking <= 0) {
             return back()->with('error', "A DT {$demanda->fo} não possui peças de picking para distribuir.");
@@ -489,33 +507,43 @@ class DemandaController extends Controller
             return back()->with('error', "Quantidade de SKUs inválida. Restante disponível para distribuição: {$skusRestantes} SKU(s).");
         }
 
-        $separadorNome = trim($request->separador_nome);
-        $distribuicaoAberta = DemandaDistribuicao::query()
-            ->where('demanda_id', $demanda->id)
-            ->where('separador_nome', $separadorNome)
-            ->whereNull('finalizado_em')
-            ->first();
+        DB::transaction(function () use ($demanda, $linhasDistribuicao) {
+            foreach ($linhasDistribuicao as $linha) {
+                $distribuicaoAberta = DemandaDistribuicao::query()
+                    ->where('demanda_id', $demanda->id)
+                    ->where('separador_nome', $linha['separador_nome'])
+                    ->whereNull('finalizado_em')
+                    ->first();
 
-        if ($distribuicaoAberta) {
-            $distribuicaoAberta->increment('quantidade_pecas', $qtd);
-            $distribuicaoAberta->increment('quantidade_skus', $qtdSkus);
-        } else {
-            DemandaDistribuicao::create([
-                'demanda_id' => $demanda->id,
-                'separador_nome' => $separadorNome,
-                'quantidade_pecas' => $qtd,
-                'quantidade_skus' => $qtdSkus,
-            ]);
-        }
+                if ($distribuicaoAberta) {
+                    $distribuicaoAberta->update([
+                        'quantidade_pecas' => $distribuicaoAberta->quantidade_pecas + $linha['quantidade_pecas'],
+                        'quantidade_skus' => $distribuicaoAberta->quantidade_skus + $linha['quantidade_skus'],
+                    ]);
+                } else {
+                    DemandaDistribuicao::create([
+                        'demanda_id' => $demanda->id,
+                        'separador_nome' => $linha['separador_nome'],
+                        'quantidade_pecas' => $linha['quantidade_pecas'],
+                        'quantidade_skus' => $linha['quantidade_skus'],
+                    ]);
+                }
+            }
 
-        if (!$demanda->separacao_iniciada_em) {
-            $demanda->update([
-                'separacao_iniciada_em' => now(),
-                'status' => 'SEPARANDO',
-            ]);
-        }
+            if (!$demanda->separacao_iniciada_em) {
+                $demanda->update([
+                    'separacao_iniciada_em' => now(),
+                    'status' => 'SEPARANDO',
+                ]);
+            }
+        });
 
-        return back()->with('success', "Distribuição registrada na DT {$demanda->fo}.");
+        $totalLinhas = $linhasDistribuicao->count();
+        $mensagem = $totalLinhas === 1
+            ? "Distribuição registrada na DT {$demanda->fo}."
+            : "{$totalLinhas} distribuições registradas na DT {$demanda->fo}.";
+
+        return back()->with('success', $mensagem);
     }
 
     public function finalizarSeparador(Request $request, $id)
@@ -557,6 +585,76 @@ class DemandaController extends Controller
         }
 
         return back()->with('success', "Separador {$separadorNome} finalizado na DT {$demanda->fo} ({$request->resultado}).");
+    }
+
+    public function redistribuirDistribuicao(Request $request, $id, DemandaDistribuicao $distribuicao)
+    {
+        $request->validate([
+            'quantidade_pecas' => 'required|integer|min:0',
+            'quantidade_skus' => 'required|integer|min:0',
+        ]);
+
+        $demanda = Demanda::withSum(['itens as total_pecas_picking' => function ($q) {
+            $q->where('sobra', '>', 0);
+        }], 'sobra')
+            ->withCount(['itens as total_skus_picking' => function ($q) {
+                $q->where('sobra', '>', 0)
+                    ->select(DB::raw('COUNT(DISTINCT COALESCE(sku_normalizado, sku))'));
+            }])
+            ->findOrFail($id);
+
+        if ((int) $distribuicao->demanda_id !== (int) $demanda->id) {
+            abort(404);
+        }
+
+        if ($demanda->separacao_finalizada_em) {
+            return back()->with('error', "A DT {$demanda->fo} já foi finalizada e não pode ser redistribuída.");
+        }
+
+        if ($distribuicao->finalizado_em) {
+            return back()->with('error', "A distribuição de {$distribuicao->separador_nome} já foi finalizada e não pode ser alterada.");
+        }
+
+        $novaQtdPecas = (int) $request->quantidade_pecas;
+        $novaQtdSkus = (int) $request->quantidade_skus;
+
+        if (($novaQtdPecas === 0 && $novaQtdSkus > 0) || ($novaQtdSkus === 0 && $novaQtdPecas > 0)) {
+            return back()->with('error', 'Para remover uma distribuição, informe 0 peças e 0 SKUs. Para manter, ambos devem ser maiores que zero.');
+        }
+
+        $totalPicking = (int) round((float) ($demanda->total_pecas_picking ?? 0));
+        $totalSkusPicking = (int) ($demanda->total_skus_picking ?? 0);
+        $pecasOutrasDistribuicoes = (int) $demanda->distribuicoes()
+            ->whereKeyNot($distribuicao->id)
+            ->sum('quantidade_pecas');
+        $skusOutrasDistribuicoes = (int) $demanda->distribuicoes()
+            ->whereKeyNot($distribuicao->id)
+            ->sum('quantidade_skus');
+
+        $limitePecas = max(0, $totalPicking - $pecasOutrasDistribuicoes);
+        $limiteSkus = max(0, $totalSkusPicking - $skusOutrasDistribuicoes);
+
+        if ($novaQtdPecas > $limitePecas) {
+            return back()->with('error', "Quantidade inválida. Máximo permitido para esta redistribuição: {$limitePecas} peças.");
+        }
+
+        if ($novaQtdSkus > $limiteSkus) {
+            return back()->with('error', "Quantidade de SKUs inválida. Máximo permitido para esta redistribuição: {$limiteSkus} SKU(s).");
+        }
+
+        if ($novaQtdPecas === 0 && $novaQtdSkus === 0) {
+            $separadorNome = $distribuicao->separador_nome;
+            $distribuicao->delete();
+
+            return back()->with('success', "Distribuição de {$separadorNome} removida. O saldo voltou para redistribuição.");
+        }
+
+        $distribuicao->update([
+            'quantidade_pecas' => $novaQtdPecas,
+            'quantidade_skus' => $novaQtdSkus,
+        ]);
+
+        return back()->with('success', "Distribuição de {$distribuicao->separador_nome} atualizada. Saldo disponível recalculado.");
     }
 
     public function iniciarSeparacao($id)
