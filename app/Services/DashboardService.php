@@ -453,10 +453,12 @@ public function getProjecaoProdutividade($dataReferencia = null)
         : ($agora->greaterThan($horaFim) ? $horaFim->copy() : $agora->copy()))
         : ($hoje->lessThan($agora->copy()->startOfDay()) ? $horaFim->copy() : $horaInicio->copy());
 
-    $produzido = (int) DB::table('_tb_demanda')
-        ->whereNotNull('separacao_finalizada_em')
-        ->whereBetween('separacao_finalizada_em', [$horaInicio, $fimProducaoReal])
-        ->sum('quantidade');
+    $produzido = (int) DB::table('_tb_demanda_distribuicoes as dd')
+        ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
+        ->where('d.possui_sobra', true)
+        ->whereNotNull('dd.finalizado_em')
+        ->whereBetween('dd.finalizado_em', [$horaInicio, $fimProducaoReal])
+        ->sum('dd.quantidade_pecas');
 
     $tempoDecorridoHoras = $fimProducaoReal->greaterThan($horaInicio)
         ? min($horaInicio->diffInMinutes($fimProducaoReal) / 60, 11)
@@ -495,10 +497,12 @@ public function getProjecaoProdutividade($dataReferencia = null)
 
         $acumuladoReal = null;
         if ($intervalo->lessThanOrEqualTo($fimProducaoReal)) {
-            $acumuladoReal = (int) DB::table('_tb_demanda')
-                ->whereNotNull('separacao_finalizada_em')
-                ->whereBetween('separacao_finalizada_em', [$horaInicio, $intervalo])
-                ->sum('quantidade');
+            $acumuladoReal = (int) DB::table('_tb_demanda_distribuicoes as dd')
+                ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
+                ->where('d.possui_sobra', true)
+                ->whereNotNull('dd.finalizado_em')
+                ->whereBetween('dd.finalizado_em', [$horaInicio, $intervalo])
+                ->sum('dd.quantidade_pecas');
         }
 
         $acumulado[] = [

@@ -292,6 +292,11 @@
 
         const projecao = dadosGraficos.projecaoProdutividade || {};
         const labelsProjecao = (projecao.curvaIdeal || []).map((item) => item.hora);
+        const valoresReaisProjecao = (projecao.apontamentos || []).map((item) => item.acumulado);
+        const maiorValorRealProjecao = Math.max(0, ...valoresReaisProjecao.filter((value) => value !== null));
+        const eixoRealMaximo = maiorValorRealProjecao > 0
+            ? Math.max(50, Math.ceil((maiorValorRealProjecao * 1.4) / 10) * 10)
+            : 100;
         const formatCaixas = (value) => Number(value || 0).toLocaleString('pt-BR');
 
         renderChart('chartProjecaoProdutividade', {
@@ -301,17 +306,20 @@
                 datasets: [
                     {
                         label: 'Caixas separadas',
-                        data: (projecao.apontamentos || []).map((item) => item.acumulado),
+                        data: valoresReaisProjecao,
+                        yAxisID: 'yReal',
                         borderColor: '#2563eb',
-                        backgroundColor: 'rgba(37, 99, 235, 0.12)',
-                        borderWidth: 3,
-                        pointRadius: 3,
-                        tension: .35,
-                        fill: true
+                        backgroundColor: 'rgba(37, 99, 235, 0.16)',
+                        borderWidth: 4,
+                        pointRadius: (ctx) => (ctx.raw || 0) > 0 ? 6 : 3,
+                        pointHoverRadius: 8,
+                        tension: .25,
+                        fill: false
                     },
                     {
                         label: 'Curva ideal',
                         data: (projecao.curvaIdeal || []).map((item) => item.valor),
+                        yAxisID: 'y',
                         borderColor: '#16a34a',
                         borderDash: [6, 4],
                         borderWidth: 2,
@@ -322,6 +330,7 @@
                     {
                         label: 'Projeção corrigida',
                         data: (projecao.projecaoCorrigida || []).map((item) => item.valor),
+                        yAxisID: 'y',
                         borderColor: '#f59e0b',
                         borderDash: [10, 5],
                         borderWidth: 2,
@@ -332,6 +341,7 @@
                     {
                         label: 'Meta 11.000 caixas',
                         data: labelsProjecao.map(() => projecao.meta || 11000),
+                        yAxisID: 'y',
                         borderColor: '#ef4444',
                         borderDash: [2, 2],
                         borderWidth: 2,
@@ -345,7 +355,16 @@
                 plugins: {
                     ...commonOptions.plugins,
                     datalabels: {
-                        display: false
+                        display: (ctx) => ctx.datasetIndex === 0 && (ctx.raw || 0) > 0,
+                        align: 'top',
+                        anchor: 'end',
+                        color: '#1d4ed8',
+                        backgroundColor: 'rgba(255,255,255,.92)',
+                        borderColor: '#bfdbfe',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        padding: 4,
+                        formatter: (value) => formatCaixas(value)
                     },
                     tooltip: {
                         callbacks: {
@@ -375,6 +394,23 @@
                             callback: (value) => formatCaixas(value)
                         },
                         suggestedMax: projecao.meta || 11000
+                    },
+                    yReal: {
+                        position: 'right',
+                        beginAtZero: true,
+                        suggestedMax: eixoRealMaximo,
+                        title: {
+                            display: true,
+                            text: 'Caixas separadas',
+                            color: '#2563eb'
+                        },
+                        ticks: {
+                            color: '#2563eb',
+                            callback: (value) => formatCaixas(value)
+                        },
+                        grid: {
+                            drawOnChartArea: false
+                        }
                     }
                 }
             }

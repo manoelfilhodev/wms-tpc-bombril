@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Demanda;
+use App\Models\DemandaDistribuicao;
 use App\Models\User;
 use App\Services\DashboardService;
 use Carbon\Carbon;
@@ -89,11 +90,23 @@ class DashboardProjecaoProdutividadeTest extends TestCase
 
     private function criarDemandaSeparada(string $fo, int $quantidade, string $finalizadaEm): Demanda
     {
-        return Demanda::create($this->demandaData($fo, $quantidade, [
+        $demanda = Demanda::create($this->demandaData($fo, $quantidade, [
             'status' => 'CONFERIDO',
+            'possui_sobra' => true,
             'separacao_finalizada_em' => $finalizadaEm,
             'separacao_resultado' => 'COMPLETA',
         ]));
+
+        DemandaDistribuicao::create([
+            'demanda_id' => $demanda->id,
+            'separador_nome' => 'Separador Teste',
+            'quantidade_pecas' => $quantidade,
+            'quantidade_skus' => 1,
+            'finalizado_em' => $finalizadaEm,
+            'resultado' => 'COMPLETA',
+        ]);
+
+        return $demanda;
     }
 
     private function demandaData(string $fo, int $quantidade, array $extra = []): array
