@@ -58,7 +58,7 @@
                                 <span>Entrar com Microsoft</span>
                             </a>
 
-                            <a href="https://systex.com.br/wms/public/app-download/app.apk"
+                            <a href="https://painel-tpc.bombril.systex.com.br/app-download/app.apk"
                                 class="btn btn-success d-flex align-items-center justify-content-center gap-2 w-100 mt-2"
                                 download>
                                 <i class="mdi mdi-android"></i>

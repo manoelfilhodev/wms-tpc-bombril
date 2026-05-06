@@ -41,6 +41,7 @@ use App\Http\Controllers\{
     DispositivoAutorizadoController
 };
 
+
 use App\Http\Controllers\Setores\{
     RecebimentoController,
     ArmazenagemController,
@@ -52,12 +53,16 @@ use App\Http\Controllers\Setores\{
     RecebimentoItemController
 };
 
+Route::get('/usuarios/buscar', [UserController::class, 'buscarSeparadores'])
+    ->name('usuarios.buscar')
+    ->middleware('auth');
+
 /*
 |--------------------------------------------------------------------------
 | WEB Routes - WMS
 |--------------------------------------------------------------------------
-| Este arquivo contém rotas web e blocos legados mantidos por compatibilidade.
-| As rotas de autenticação ficam no módulo: routes/web/auth.php.
+| Este arquivo contï¿½m rotas web e blocos legados mantidos por compatibilidade.
+| As rotas de autenticaï¿½ï¿½o ficam no mï¿½dulo: routes/web/auth.php.
 */
 Route::get('/imprimir-tudo/{recebimento_id}', [RecebimentoEtiquetaController::class, 'imprimirTudo'])->name('imprimir-tudo');
 
@@ -75,7 +80,7 @@ Route::prefix('setores/recebimento')->name('setores.recebimento.')->group(functi
 
 /*
 |--------------------------------------------------------------------------
-| transferencias Routes (módulo)
+| transferencias Routes (mï¿½dulo)
 |--------------------------------------------------------------------------
 */
 require __DIR__ . '/web/transferencias.php';
@@ -100,7 +105,7 @@ Route::get('/kits/pendencias', [App\Http\Controllers\KitMontagemController::clas
 
 /*
 |--------------------------------------------------------------------------
-| demandas Routes (módulo)
+| demandas Routes (mï¿½dulo)
 |--------------------------------------------------------------------------
 */
 require __DIR__ . '/web/demandas.php';
@@ -138,7 +143,7 @@ Route::prefix('kits')->group(function () {
     Route::post('/{id}/etiquetas/gerar', [KitEtiquetaController::class, 'gerar'])->name('kits.etiquetas.gerar');
     Route::get('/{id}/etiquetas/imprimir-tudo', [KitEtiquetaController::class, 'imprimirTudo'])->name('kits.etiquetas.imprimirTudo');
     Route::get('/etiquetas/{id}/reimprimir', [KitEtiquetaController::class, 'reimprimir'])->name('kits.etiquetas.reimprimir');
-     Route::get('/etiquetas', [KitEtiquetaController::class, 'index'])
+    Route::get('/etiquetas', [KitEtiquetaController::class, 'index'])
         ->name('kit.etiquetas');
 });
 
@@ -177,7 +182,7 @@ Route::middleware(['auth'])->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| inventario Routes (módulo)
+| inventario Routes (mï¿½dulo)
 |--------------------------------------------------------------------------
 */
 require __DIR__ . '/web/inventario.php';
@@ -472,7 +477,6 @@ Route::post('/setores/conferencia/{id}/salvar-foto', [ConferenciaController::cla
 Route::middleware(['auth'])->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-
 });
 
 Route::middleware(['auth', 'admin'])->group(function () {
@@ -554,7 +558,7 @@ Route::prefix('contagem')->middleware('auth')->group(function () {
     Route::get('/itens', [ContagemItemController::class, 'index'])->name('contagem.itens.index');
     Route::get('/itens/novo', [ContagemItemController::class, 'create'])->name('contagem.itens.create');
     Route::post('/itens', [ContagemItemController::class, 'store'])->name('contagem.itens.store');
-    
+
     Route::get('/itens/export/excel', [ContagemItemController::class, 'exportExcel'])->name('contagem.itens.excel');
     Route::get('/itens/export/pdf', [ContagemItemController::class, 'exportPDF'])->name('contagem.itens.pdf');
 });
@@ -687,11 +691,7 @@ Route::prefix('recebimento')->middleware('auth')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| Auth Routes (módulo dedicado)
+| Auth Routes (mï¿½dulo dedicado)
 |--------------------------------------------------------------------------
 */
 require __DIR__ . '/web/auth.php';
-
-
-
-

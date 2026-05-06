@@ -118,59 +118,75 @@ class AuthController extends Controller
         return redirect()->away($this->microsoftLogoutUrl());
     }
 
-    public function apiLogin(Request $request)
-    {
-        $credentials = $request->only('email', 'password');
+public function apiLogin(Request $request)
+{
+    $credentials = $request->only('email', 'password');
 
-        if (empty($credentials['email']) || empty($credentials['password'])) {
-            return response()->json(['message' => 'Preencha todos os campos.'], 422);
-        }
-
-        $user = User::where('email', $credentials['email'])->first();
-
-        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
-            if ($user && $user->id_user && $user->unidade_id) {
-                $this->insertUserLog(
-                    (int) $user->id_user,
-                    (int) $user->unidade_id,
-                    'login_api - falhou',
-                    ['email' => $credentials['email']],
-                    $request
-                );
-            }
-
-            return response()->json(['message' => 'Credenciais invalidas'], 401);
-        }
-
-        $token = $user->createToken('app_token')->plainTextToken;
-
-        $this->insertUserLog(
-            (int) $user->id_user,
-            (int) $user->unidade_id,
-            'login_app - sucesso',
-            ['email' => $user->email],
-            $request
-        );
-
-        $this->insertUserLog(
-            (int) $user->id_user,
-            (int) $user->unidade_id,
-            'login - sucesso',
-            ['email' => $user->email],
-            $request
-        );
-
-        return response()->json([
-            'token' => $token,
-            'user' => [
-                'id' => $user->id_user,
-                'nome' => $user->nome,
-                'tipo' => $user->tipo,
-                'unidade' => $user->unidade_id,
-                'nivel' => $user->nivel,
-            ],
-        ]);
+    if (empty($credentials['email']) || empty($credentials['password'])) {
+        return response()->json(['message' => 'Preencha todos os campos.'], 422);
     }
+
+    $user = User::where('email', $credentials['email'])->first();
+
+    if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+        if ($user && $user->id_user && $user->unidade_id) {
+            $this->insertUserLog(
+                (int) $user->id_user,
+                (int) $user->unidade_id,
+                'login_api - falhou',
+                ['email' => $credentials['email']],
+                $request
+            );
+        }
+
+        return response()->json(['message' => 'Credenciais invalidas'], 401);
+    }
+
+    // 🔐 GERAR TOKEN
+    $token = $user->createToken('app_token')->plainTextToken;
+
+    // 🧠 CAPTURAR DEVICE ID (HEADER OU BODY)
+    $deviceId = $request->header('X-Device-Id') 
+        ?? $request->input('device_id');
+
+    $device = null;
+
+    if ($deviceId) {
+        $device = app(\App\Services\DeviceAuthorizationService::class)
+            ->findAuthorizedDevice($user, $deviceId, 'app');
+    }
+
+    // 📝 LOGS
+    $this->insertUserLog(
+        (int) $user->id_user,
+        (int) $user->unidade_id,
+        'login_app - sucesso',
+        ['email' => $user->email, 'device_id' => $deviceId],
+        $request
+    );
+
+    $this->insertUserLog(
+        (int) $user->id_user,
+        (int) $user->unidade_id,
+        'login - sucesso',
+        ['email' => $user->email],
+        $request
+    );
+
+    // 🚀 RESPOSTA FINAL
+    return response()->json([
+        'token' => $token,
+        'user' => [
+            'id' => $user->id_user,
+            'nome' => $user->nome,
+            'tipo' => $user->tipo,
+            'unidade' => $user->unidade_id,
+            'nivel' => $user->nivel,
+        ],
+        'device_authorized' => (bool) $device,
+        'device_id' => $deviceId, // opcional (bom pra debug)
+    ]);
+}
 
     private function insertUserLog(int $usuarioId, int $unidadeId, string $acao, array $dados, Request $request): void
     {

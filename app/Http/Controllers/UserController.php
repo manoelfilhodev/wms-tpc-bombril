@@ -165,4 +165,22 @@ class UserController extends Controller
             default => 'operador',
         };
     }
+
+    public function buscarSeparadores(Request $request)
+{
+    $q = trim($request->get('q', ''));
+
+    $separadores = DB::table('_tb_separadores')
+        ->select('id', 'chapa', 'nome', 'cargo', 'turno')
+        ->when($q, function ($query) use ($q) {
+            $query->where('nome', 'like', "%{$q}%")
+                ->orWhere('chapa', 'like', "%{$q}%")
+                ->orWhere('cargo', 'like', "%{$q}%");
+        })
+        ->orderBy('nome')
+        ->limit(20)
+        ->get();
+
+    return response()->json($separadores);
+}
 }

@@ -73,7 +73,7 @@
                 <thead>
                     <tr>
                         <th>Separador</th>
-                        <th></th>
+                        <th>Caixas</th>
                         <th>SKU</th>
                     </tr>
                 </thead>
