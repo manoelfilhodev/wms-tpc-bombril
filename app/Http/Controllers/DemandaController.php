@@ -37,16 +37,43 @@ class DemandaController extends Controller
         $query->where('cliente', 'like', "%{$request->cliente}%");
     }
 
-    if ($request->filled('status')) {
-        if ($request->status === 'SEPARADO_PARCIAL') {
-            $query->whereNotNull('separacao_finalizada_em')
-                ->where('separacao_resultado', 'PARCIAL');
-        } elseif ($request->status === 'SEPARADO') {
-            $query->whereNotNull('separacao_finalizada_em')
-                ->where('separacao_resultado', 'COMPLETA');
-        } else {
-            $query->where('status', $request->status);
-        }
+    $statusFiltros = collect((array) $request->input('status', []))
+        ->filter()
+        ->unique()
+        ->values();
+
+    if ($statusFiltros->isNotEmpty()) {
+        $query->where(function ($statusQuery) use ($statusFiltros) {
+            foreach ($statusFiltros as $status) {
+                if ($status === 'SEPARADO_PARCIAL') {
+                    $statusQuery->orWhere(function ($q) {
+                        $q->whereNotNull('separacao_finalizada_em')
+                            ->where('separacao_resultado', 'PARCIAL');
+                    });
+                } elseif ($status === 'SEPARADO') {
+                    $statusQuery->orWhere(function ($q) {
+                        $q->whereNotNull('separacao_finalizada_em')
+                            ->where('separacao_resultado', 'COMPLETA');
+                    });
+                } elseif ($status === 'A_SEPARAR') {
+                    $statusQuery->orWhere(function ($q) {
+                        $q->whereNull('separacao_finalizada_em')
+                            ->whereNull('separacao_iniciada_em')
+                            ->whereDoesntHave('distribuicoes');
+                    });
+                } elseif ($status === 'SEPARANDO') {
+                    $statusQuery->orWhere(function ($q) {
+                        $q->whereNull('separacao_finalizada_em')
+                            ->where(function ($emSeparacao) {
+                                $emSeparacao->whereNotNull('separacao_iniciada_em')
+                                    ->orWhereHas('distribuicoes');
+                            });
+                    });
+                } else {
+                    $statusQuery->orWhere('status', $status);
+                }
+            }
+        });
     }
 
     if ($request->boolean('somente_sobra')) {

@@ -90,11 +90,11 @@
         <!-- Card de Filtros (padrão gestão de estoque) -->
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-body">
-                <form method="GET" action="{{ route('demandas.index') }}" class="row g-3">
+                <form method="GET" action="{{ route('demandas.index') }}" class="row g-3 demanda-filter-form align-items-end" autocomplete="off">
                     @if (!empty($modoOperacional))
                         <input type="hidden" name="somente_sobra" value="1">
                     @endif
-                    <div class="col-md-2">
+                    <div class="col-12 {{ !empty($modoOperacional) ? 'col-lg-3' : 'col-lg-2' }}">
                         <label class="form-label small text-muted mb-1">DT</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0">
@@ -105,7 +105,7 @@
                         </div>
                     </div>
                     @if (empty($modoOperacional))
-                        <div class="col-md-3">
+                        <div class="col-12 col-lg-3">
                             <label class="form-label small text-muted mb-1">Transportadora</label>
                             <div class="input-group">
                                 <span class="input-group-text bg-light border-end-0">
@@ -116,29 +116,12 @@
                             </div>
                         </div>
                     @endif
-                    <div class="col-md-2">
-                        <label class="form-label small text-muted mb-1">Status</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light">
-                                <i class="mdi mdi-compare-horizontal text-muted"></i>
-                            </span>
-                            <select name="status" class="form-select">
-                                <option value="">Todos</option>
-                                <option value="A_SEPARAR" {{ request('status') == 'A_SEPARAR' ? 'selected' : '' }}>A
-                                    separar
-                                </option>
-                                <option value="SEPARANDO" {{ request('status') == 'SEPARANDO' ? 'selected' : '' }}>
-                                    Separando
-                                </option>
-                                <option value="SEPARADO_PARCIAL"
-                                    {{ request('status') == 'SEPARADO_PARCIAL' ? 'selected' : '' }}>Separação parcial
-                                </option>
-                                <option value="SEPARADO" {{ request('status') == 'SEPARADO' ? 'selected' : '' }}>Separado
-                                </option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-2">
+                    @php
+                        $statusSelecionados = request()->query->has('status')
+                            ? collect((array) request()->query('status'))->filter()->values()->all()
+                            : [];
+                    @endphp
+                    <div class="col-12 {{ !empty($modoOperacional) ? 'col-lg-3' : 'col-lg-2' }}">
                         <label class="form-label small text-muted mb-1">Data Início</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0">
@@ -148,7 +131,7 @@
                                 value="{{ request('data_inicio') }}">
                         </div>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-12 {{ !empty($modoOperacional) ? 'col-lg-3' : 'col-lg-2' }}">
                         <label class="form-label small text-muted mb-1">Data Fim</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0">
@@ -158,7 +141,7 @@
                                 value="{{ request('data_fim') }}">
                         </div>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-12 col-lg-3">
                         <label class="form-label small text-muted mb-1">Ordenar</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light">
@@ -178,17 +161,53 @@
                             </select>
                         </div>
                     </div>
-                    <div class="col-md-1 d-flex align-items-end gap-2">
-                        <button type="submit" class="btn btn-rosa w-100" data-bs-toggle="tooltip"
-        title="Aplicar filtros">
-    <i class="mdi mdi-magnify"></i>
-</button>
-                        @if (request()->hasAny(['fo', 'transportadora', 'status', 'data_inicio', 'data_fim', 'ordem']))
-                            <a href="{{ !empty($modoOperacional) ? route('demandas.operacional') : route('demandas.index') }}"
-                                class="btn btn-outline-secondary" data-bs-toggle="tooltip" title="Limpar filtros">
-                                <i class="mdi mdi-close"></i>
-                            </a>
-                        @endif
+                    <div class="col-12">
+                        <div class="filter-status-row">
+                            <div class="filter-status-main">
+                                <label class="form-label small text-muted mb-1">Status</label>
+                                <div class="status-filter-group" aria-label="Status">
+                                    <input type="checkbox" class="btn-check" name="status[]" id="status-a-separar"
+                                        value="A_SEPARAR" autocomplete="off" @checked(in_array('A_SEPARAR', $statusSelecionados, true))>
+                                    <label class="status-filter-chip" for="status-a-separar">
+                                        <span class="status-dot status-dot-info"></span>
+                                        A separar
+                                    </label>
+
+                                    <input type="checkbox" class="btn-check" name="status[]" id="status-separando"
+                                        value="SEPARANDO" autocomplete="off" @checked(in_array('SEPARANDO', $statusSelecionados, true))>
+                                    <label class="status-filter-chip" for="status-separando">
+                                        <span class="status-dot status-dot-primary"></span>
+                                        Separando
+                                    </label>
+
+                                    <input type="checkbox" class="btn-check" name="status[]" id="status-separado-parcial"
+                                        value="SEPARADO_PARCIAL" autocomplete="off" @checked(in_array('SEPARADO_PARCIAL', $statusSelecionados, true))>
+                                    <label class="status-filter-chip" for="status-separado-parcial">
+                                        <span class="status-dot status-dot-warning"></span>
+                                        Parcial
+                                    </label>
+
+                                    <input type="checkbox" class="btn-check" name="status[]" id="status-separado"
+                                        value="SEPARADO" autocomplete="off" @checked(in_array('SEPARADO', $statusSelecionados, true))>
+                                    <label class="status-filter-chip" for="status-separado">
+                                        <span class="status-dot status-dot-success"></span>
+                                        Separado
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="filter-actions">
+                                <button type="submit" class="btn btn-rosa" data-bs-toggle="tooltip"
+                                    title="Aplicar filtros">
+                                    <i class="mdi mdi-magnify"></i>
+                                </button>
+                                @if (request()->hasAny(['fo', 'transportadora', 'status', 'data_inicio', 'data_fim', 'ordem']))
+                                    <a href="{{ !empty($modoOperacional) ? route('demandas.operacional') : route('demandas.index') }}"
+                                        class="btn btn-outline-secondary" data-bs-toggle="tooltip" title="Limpar filtros">
+                                        <i class="mdi mdi-close"></i>
+                                    </a>
+                                @endif
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -324,13 +343,29 @@
                                         </td>
                                     </tr>
                                 @empty
+                                    @php
+                                        $statusLabelsFiltro = [
+                                            'A_SEPARAR' => 'A separar',
+                                            'SEPARANDO' => 'Separando',
+                                            'SEPARADO_PARCIAL' => 'Separado parcial',
+                                            'SEPARADO' => 'Separado',
+                                        ];
+                                        $statusFiltroTexto = collect($statusSelecionados)
+                                            ->map(fn ($status) => $statusLabelsFiltro[$status] ?? $status)
+                                            ->implode(', ');
+                                    @endphp
                                     <tr>
                                         <td colspan="{{ !empty($modoOperacional) ? 7 : 8 }}" class="text-center py-5">
                                             <div class="text-muted">
                                                 <i
                                                     class="mdi mdi-package-variant-closed display-4 d-block mb-3 opacity-25"></i>
-                                                <p class="mb-0">Nenhuma demanda encontrada</p>
-                                                <small>Tente ajustar os filtros ou criar uma nova demanda</small>
+                                                @if ($statusFiltroTexto !== '')
+                                                    <p class="mb-0">Nenhuma DT encontrada com status {{ $statusFiltroTexto }} neste período.</p>
+                                                    <small>Altere o status, ajuste as datas ou limpe os filtros.</small>
+                                                @else
+                                                    <p class="mb-0">Nenhuma demanda encontrada</p>
+                                                    <small>Tente ajustar os filtros ou criar uma nova demanda</small>
+                                                @endif
                                             </div>
                                         </td>
                                     </tr>
@@ -549,6 +584,17 @@
         document.getElementById('checkAll')?.addEventListener('change', function() {
             document.querySelectorAll('input[name="ids[]"]').forEach(cb => cb.checked = this.checked);
         });
+
+        window.addEventListener('pageshow', function() {
+            const params = new URLSearchParams(window.location.search);
+            const hasStatusFilter = params.has('status') || params.has('status[]');
+
+            if (!hasStatusFilter) {
+                document.querySelectorAll('.status-filter-group input[name="status[]"]').forEach(function(input) {
+                    input.checked = false;
+                });
+            }
+        });
     </script>
 
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
@@ -713,15 +759,124 @@
             color: #9ca3af;
         }
        
-.btn-rosa {
-    background: linear-gradient(135deg, #ff4da6, #ff1a75);
-    border: none;
-    color: #fff;
-}
+        .filter-status-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 12px;
+            padding-top: 2px;
+        }
 
-.btn-rosa:hover {
-    background: linear-gradient(135deg, #ff1a75, #e6005c);
-    box-shadow: 0 0 10px rgba(255, 77, 166, 0.6);
-}
+        .filter-status-main {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .filter-actions {
+            display: flex;
+            flex: 0 0 auto;
+            gap: 8px;
+        }
+
+        .filter-actions .btn {
+            min-width: 48px;
+            min-height: 38px;
+        }
+
+        .filter-actions .btn-rosa {
+            min-width: 138px;
+        }
+
+        .status-filter-group {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(120px, 1fr));
+            gap: 8px;
+            min-height: 38px;
+        }
+
+        .status-filter-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            min-height: 38px;
+            padding: 0 10px;
+            border: 1px solid #d7dfec;
+            border-radius: 6px;
+            background: #fff;
+            color: #44546a;
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-weight: 700;
+            line-height: 1;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .status-filter-chip:hover {
+            border-color: #9fb2cc;
+            color: #1f2937;
+            background: #f8fafc;
+        }
+
+        .btn-check:checked + .status-filter-chip {
+            border-color: #ff4da6;
+            background: rgba(255, 77, 166, 0.09);
+            box-shadow: 0 0 0 2px rgba(255, 77, 166, 0.12);
+            color: #111827;
+        }
+
+        .btn-check:focus + .status-filter-chip {
+            border-color: #ff4da6;
+            box-shadow: 0 0 0 3px rgba(255, 77, 166, 0.16);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex: 0 0 8px;
+        }
+
+        .status-dot-info { background: #0dcaf0; }
+        .status-dot-primary { background: #0d6efd; }
+        .status-dot-warning { background: #ffc107; }
+        .status-dot-success { background: #198754; }
+
+        @media (max-width: 991.98px) {
+            .filter-status-row {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .filter-actions .btn,
+            .filter-actions .btn-rosa {
+                flex: 1 1 0;
+                min-width: 0;
+            }
+        }
+
+        @media (max-width: 767.98px) {
+            .status-filter-group {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 479.98px) {
+            .status-filter-group {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .btn-rosa {
+            background: linear-gradient(135deg, #ff4da6, #ff1a75);
+            border: none;
+            color: #fff;
+        }
+
+        .btn-rosa:hover {
+            background: linear-gradient(135deg, #ff1a75, #e6005c);
+            box-shadow: 0 0 10px rgba(255, 77, 166, 0.6);
+        }
     </style>
 @endsection
