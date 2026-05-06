@@ -1278,6 +1278,252 @@ class DemandaController extends Controller
         ]);
     }
 
+    public function reportGerencial(Request $request)
+    {
+        $dataFim = $request->input('data_fim', Carbon::today()->toDateString());
+        $dataInicio = $request->input('data_inicio', Carbon::parse($dataFim)->subDays(6)->toDateString());
+        $turno = $this->normalizarTurno($request->input('turno'));
+        $separador = trim((string) $request->input('separador', ''));
+
+        $inicio = Carbon::parse($dataInicio)->startOfDay();
+        $fim = Carbon::parse($dataFim)->endOfDay();
+
+        if ($inicio->greaterThan($fim)) {
+            [$inicio, $fim] = [$fim->copy()->startOfDay(), $inicio->copy()->endOfDay()];
+            [$dataInicio, $dataFim] = [$inicio->toDateString(), $fim->toDateString()];
+        }
+
+        $periodoDias = max(1, $inicio->copy()->startOfDay()->diffInDays($fim->copy()->startOfDay()) + 1);
+        $inicioAnterior = $inicio->copy()->subDays($periodoDias);
+        $fimAnterior = $inicio->copy()->subSecond();
+        $turnos = $this->turnosOperacionais();
+
+        $aplicarSeparadorDemanda = function ($query) use ($separador) {
+            if ($separador !== '') {
+                $query->whereHas('distribuicoes', function ($q) use ($separador) {
+                    $q->where('separador_nome', 'like', "%{$separador}%");
+                });
+            }
+        };
+
+        $aplicarTurno = function ($query, string $coluna) use ($turno) {
+            if ($turno) {
+                $this->aplicarFiltroTurnoSql($query, $coluna, $turno);
+            }
+        };
+
+        $baseCriadas = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereBetween('created_at', [$inicio, $fim]);
+        $aplicarTurno($baseCriadas, 'created_at');
+        $aplicarSeparadorDemanda($baseCriadas);
+
+        $baseFinalizadas = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereNotNull('separacao_finalizada_em')
+            ->whereBetween('separacao_finalizada_em', [$inicio, $fim]);
+        $aplicarTurno($baseFinalizadas, 'separacao_finalizada_em');
+        $aplicarSeparadorDemanda($baseFinalizadas);
+
+        $baseAnterior = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereNotNull('separacao_finalizada_em')
+            ->whereBetween('separacao_finalizada_em', [$inicioAnterior, $fimAnterior]);
+        $aplicarTurno($baseAnterior, 'separacao_finalizada_em');
+        $aplicarSeparadorDemanda($baseAnterior);
+
+        $tempoExpr = $this->tempoDiffMinExpr('separacao_iniciada_em', 'separacao_finalizada_em');
+        $criadas = (clone $baseCriadas)->count();
+        $finalizadas = (clone $baseFinalizadas)->count();
+        $finalizadasAnterior = (clone $baseAnterior)->count();
+        $completas = (clone $baseFinalizadas)->where('separacao_resultado', 'COMPLETA')->count();
+        $parciais = (clone $baseFinalizadas)->where('separacao_resultado', 'PARCIAL')->count();
+        $emAbertoPeriodo = (clone $baseCriadas)->whereNull('separacao_finalizada_em')->count();
+        $backlogAberto = Demanda::query()
+            ->where('possui_sobra', true)
+            ->where('created_at', '<', $inicio)
+            ->whereNull('separacao_finalizada_em');
+        $aplicarSeparadorDemanda($backlogAberto);
+
+        $tempoMedioMin = (clone $baseFinalizadas)
+            ->whereNotNull('separacao_iniciada_em')
+            ->selectRaw("AVG({$tempoExpr}) as media")
+            ->value('media');
+
+        $tempoMaxMin = (clone $baseFinalizadas)
+            ->whereNotNull('separacao_iniciada_em')
+            ->selectRaw("MAX({$tempoExpr}) as maior")
+            ->value('maior');
+
+        $createdDateExpr = $this->dateExpr('created_at');
+        $finalizedDateExpr = $this->dateExpr('separacao_finalizada_em');
+        $finalizadasNoDia = (clone $baseFinalizadas)
+            ->whereRaw("{$createdDateExpr} = {$finalizedDateExpr}")
+            ->count();
+        $finalizadasForaDia = max(0, $finalizadas - $finalizadasNoDia);
+        $slaNoDia = $finalizadas > 0 ? round(($finalizadasNoDia / $finalizadas) * 100, 1) : 0;
+        $variacaoVolume = $finalizadasAnterior > 0
+            ? round((($finalizadas - $finalizadasAnterior) / $finalizadasAnterior) * 100, 1)
+            : null;
+
+        $baseDistribuicoes = DB::table('_tb_demanda_distribuicoes as dd')
+            ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
+            ->where('d.possui_sobra', true)
+            ->whereNotNull('dd.finalizado_em')
+            ->whereBetween('dd.finalizado_em', [$inicio, $fim]);
+
+        if ($turno) {
+            $this->aplicarFiltroTurnoSql($baseDistribuicoes, 'dd.finalizado_em', $turno);
+        }
+
+        if ($separador !== '') {
+            $baseDistribuicoes->where('dd.separador_nome', 'like', "%{$separador}%");
+        }
+
+        $totaisDistribuicoes = (clone $baseDistribuicoes)
+            ->selectRaw('SUM(COALESCE(dd.quantidade_pecas, 0)) as pecas')
+            ->selectRaw('SUM(COALESCE(dd.quantidade_skus, 0)) as skus')
+            ->selectRaw('COUNT(DISTINCT d.id) as dts')
+            ->first();
+
+        $produtividade = (clone $baseDistribuicoes)
+            ->whereNotNull('dd.separador_nome')
+            ->whereRaw("TRIM(dd.separador_nome) <> ''")
+            ->selectRaw('dd.separador_nome as separador')
+            ->selectRaw('COUNT(DISTINCT d.id) as dts')
+            ->selectRaw('COUNT(*) as apontamentos')
+            ->selectRaw('SUM(COALESCE(dd.quantidade_pecas, 0)) as pecas')
+            ->selectRaw('SUM(COALESCE(dd.quantidade_skus, 0)) as skus')
+            ->selectRaw("AVG(" . $this->tempoDiffMinExpr('dd.created_at', 'dd.finalizado_em') . ") as tempo_medio_min")
+            ->groupBy('dd.separador_nome')
+            ->orderByDesc('pecas')
+            ->limit(15)
+            ->get()
+            ->map(function ($item) use ($totaisDistribuicoes) {
+                $totalPecas = (float) ($totaisDistribuicoes->pecas ?? 0);
+                $pecas = (int) $item->pecas;
+
+                return [
+                    'separador' => mb_strtoupper($item->separador),
+                    'dts' => (int) $item->dts,
+                    'apontamentos' => (int) $item->apontamentos,
+                    'pecas' => $pecas,
+                    'skus' => (int) $item->skus,
+                    'tempo_medio_min' => $item->tempo_medio_min !== null ? round((float) $item->tempo_medio_min, 1) : null,
+                    'participacao' => $totalPecas > 0 ? round(($pecas / $totalPecas) * 100, 1) : 0,
+                ];
+            });
+
+        $labelsPeriodo = collect();
+        $cursor = $inicio->copy()->startOfDay();
+        while ($cursor <= $fim) {
+            $labelsPeriodo->push($cursor->toDateString());
+            $cursor->addDay();
+        }
+
+        $criadasPorDiaQuery = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereBetween('created_at', [$inicio, $fim]);
+        $aplicarTurno($criadasPorDiaQuery, 'created_at');
+        $aplicarSeparadorDemanda($criadasPorDiaQuery);
+        $criadasPorDia = $criadasPorDiaQuery
+            ->selectRaw("{$createdDateExpr} as dia")
+            ->selectRaw('COUNT(*) as total')
+            ->groupBy('dia')
+            ->pluck('total', 'dia');
+
+        $finalizadasPorDiaQuery = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereNotNull('separacao_finalizada_em')
+            ->whereBetween('separacao_finalizada_em', [$inicio, $fim]);
+        $aplicarTurno($finalizadasPorDiaQuery, 'separacao_finalizada_em');
+        $aplicarSeparadorDemanda($finalizadasPorDiaQuery);
+        $finalizadasPorDia = $finalizadasPorDiaQuery
+            ->selectRaw("{$finalizedDateExpr} as dia")
+            ->selectRaw('COUNT(*) as total')
+            ->groupBy('dia')
+            ->pluck('total', 'dia');
+
+        $separadoresDisponiveis = DB::table('_tb_demanda_distribuicoes')
+            ->whereNotNull('separador_nome')
+            ->whereRaw("TRIM(separador_nome) <> ''")
+            ->selectRaw('DISTINCT separador_nome')
+            ->orderBy('separador_nome')
+            ->limit(80)
+            ->pluck('separador_nome');
+
+        $resumo = [
+            'criadas' => $criadas,
+            'finalizadas' => $finalizadas,
+            'em_aberto_periodo' => $emAbertoPeriodo,
+            'backlog_aberto' => (clone $backlogAberto)->count(),
+            'completas' => $completas,
+            'parciais' => $parciais,
+            'percentual_conclusao' => $criadas > 0 ? round(($finalizadas / $criadas) * 100, 1) : 0,
+            'percentual_parcial' => $finalizadas > 0 ? round(($parciais / $finalizadas) * 100, 1) : 0,
+            'sla_no_dia' => $slaNoDia,
+            'finalizadas_no_dia' => $finalizadasNoDia,
+            'finalizadas_fora_dia' => $finalizadasForaDia,
+            'tempo_medio_min' => $tempoMedioMin !== null ? round((float) $tempoMedioMin, 1) : null,
+            'tempo_max_min' => $tempoMaxMin !== null ? round((float) $tempoMaxMin, 1) : null,
+            'pecas' => (int) ($totaisDistribuicoes->pecas ?? 0),
+            'skus' => (int) ($totaisDistribuicoes->skus ?? 0),
+            'dts_com_apontamento' => (int) ($totaisDistribuicoes->dts ?? 0),
+            'variacao_volume' => $variacaoVolume,
+        ];
+
+        $pontosAtencao = collect();
+        if ($resumo['backlog_aberto'] > 0) {
+            $pontosAtencao->push("Backlog aberto de {$resumo['backlog_aberto']} DTs anteriores ao período.");
+        }
+        if ($resumo['percentual_parcial'] >= 15) {
+            $pontosAtencao->push("Separação parcial em {$resumo['percentual_parcial']}% das DTs finalizadas.");
+        }
+        if ($resumo['sla_no_dia'] < 80 && $finalizadas > 0) {
+            $pontosAtencao->push("SLA no mesmo dia em {$resumo['sla_no_dia']}%, abaixo do patamar de atenção.");
+        }
+        if ($pontosAtencao->isEmpty()) {
+            $pontosAtencao->push('Operação sem alertas críticos nos indicadores principais do período.');
+        }
+
+        $dadosGraficos = [
+            'evolucao' => [
+                'labels' => $labelsPeriodo->map(fn($dia) => Carbon::parse($dia)->format('d/m'))->values(),
+                'criadas' => $labelsPeriodo->map(fn($dia) => (int) ($criadasPorDia[$dia] ?? 0))->values(),
+                'finalizadas' => $labelsPeriodo->map(fn($dia) => (int) ($finalizadasPorDia[$dia] ?? 0))->values(),
+            ],
+            'produtividade' => [
+                'labels' => $produtividade->pluck('separador')->values(),
+                'pecas' => $produtividade->pluck('pecas')->values(),
+                'dts' => $produtividade->pluck('dts')->values(),
+            ],
+            'status' => [
+                'labels' => ['Completas', 'Parciais', 'Em aberto', 'Backlog'],
+                'values' => [
+                    $resumo['completas'],
+                    $resumo['parciais'],
+                    $resumo['em_aberto_periodo'],
+                    $resumo['backlog_aberto'],
+                ],
+            ],
+        ];
+
+        return view('demandas.report_gerencial', [
+            'dataInicio' => $dataInicio,
+            'dataFim' => $dataFim,
+            'inicio' => $inicio,
+            'fim' => $fim,
+            'turnoSelecionado' => $turno,
+            'turnosOperacionais' => $turnos,
+            'separadorSelecionado' => $separador,
+            'separadoresDisponiveis' => $separadoresDisponiveis,
+            'resumo' => $resumo,
+            'produtividade' => $produtividade,
+            'pontosAtencao' => $pontosAtencao,
+            'dadosGraficos' => $dadosGraficos,
+        ]);
+    }
+
     public function identificacaoA4(Request $request)
     {
         $tipoIdentificacao = $request->input('tipo', 'dt') === 'box' ? 'box' : 'dt';

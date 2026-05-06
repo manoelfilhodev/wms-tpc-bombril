@@ -18,6 +18,7 @@ Route::prefix('demandas')->middleware(['auth'])->group(function () {
     Route::get('/operacional', [DemandaController::class, 'operacional'])->middleware('demanda.perfil:operacional')->name('demandas.operacional');
     Route::get('/dashboard-operacional', [DemandaController::class, 'dashboardOperacional'])->middleware('demanda.perfil:operacional')->name('demandas.dashboardOperacional');
     Route::get('/relatorios', [DemandaController::class, 'relatoriosOperacional'])->middleware('demanda.perfil:operacional')->name('demandas.relatorios');
+    Route::get('/relatorios/gerencial', [DemandaController::class, 'reportGerencial'])->middleware('demanda.perfil:operacional')->name('demandas.reportGerencial');
     Route::get('/relatorios/turno', [DemandaController::class, 'reportTurno'])->middleware('demanda.perfil:operacional')->name('demandas.reportTurno');
     Route::get('/identificacao-a4', [DemandaController::class, 'identificacaoA4'])->middleware('demanda.perfil:operacional')->name('demandas.identificacaoA4');
     Route::get('/create', [DemandaController::class, 'create'])->middleware('demanda.perfil:sala')->name('demandas.create');

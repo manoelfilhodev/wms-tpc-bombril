@@ -15,6 +15,9 @@
             </div>
         </div>
         <div class="d-flex gap-2">
+            <a href="{{ route('demandas.reportGerencial') }}" class="btn btn-primary btn-sm">
+                <i class="mdi mdi-view-dashboard-outline me-1"></i> Report gerencial
+            </a>
             <a href="{{ route('demandas.reportTurno') }}" class="btn btn-primary btn-sm">
                 <i class="mdi mdi-whatsapp me-1"></i> Report de turno
             </a>
@@ -46,6 +49,15 @@
             <p class="text-muted small mb-3">Base principal: DT, SKU e Quantidade (incluindo itens com sobra/picking).</p>
 
             <div class="row g-3">
+                <div class="col-md-6">
+                    <a href="{{ route('demandas.reportGerencial') }}" class="text-decoration-none text-reset">
+                        <div class="border rounded p-3 h-100">
+                            <h6 class="mb-2">Report Gerencial da Operação</h6>
+                            <p class="small text-muted mb-2">Visão executiva por período com SLA, backlog, produtividade e evolução diária.</p>
+                            <small class="text-primary">Abrir tela gerencial</small>
+                        </div>
+                    </a>
+                </div>
                 <div class="col-md-6">
                     <a href="{{ route('demandas.reportTurno') }}" class="text-decoration-none text-reset">
                         <div class="border rounded p-3 h-100">
