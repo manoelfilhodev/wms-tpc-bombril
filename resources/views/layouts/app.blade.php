@@ -60,7 +60,7 @@
     @yield('head')
 </head>
 
-<body class="loading {{ $isOperatorLayout ? 'operator-fullscreen' : '' }}" data-layout-config='{"leftSideBarTheme":"dark","layoutBoxed":false,"leftSidebarCondensed":false,"darkMode":false}'>
+<body class="loading {{ $isOperatorLayout ? 'operator-fullscreen' : '' }} @yield('body_class')" data-layout-config='{"leftSideBarTheme":"dark","layoutBoxed":false,"leftSidebarCondensed":false,"darkMode":false}'>
     @include('partials.dev-environment-badge')
 
     <div class="wrapper">

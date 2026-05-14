@@ -53,4 +53,21 @@ return [
         'tenant_id' => env('MICROSOFT_TENANT_ID'),
     ],
 
+    'expedicao_rotas' => [
+        'provider' => env('EXPEDICAO_ROTAS_PROVIDER', 'osrm'),
+        'key' => env('GOOGLE_MAPS_API_KEY'),
+        'endpoint' => env('EXPEDICAO_ROTAS_ENDPOINT', 'https://maps.googleapis.com/maps/api/distancematrix/json'),
+        'osrm_endpoint' => env('EXPEDICAO_ROTAS_OSRM_ENDPOINT', 'https://router.project-osrm.org/route/v1/driving'),
+        'geocode_endpoint' => env('EXPEDICAO_ROTAS_GEOCODE_ENDPOINT', 'https://nominatim.openstreetmap.org/search'),
+        'origin_city' => env('EXPEDICAO_ROTAS_ORIGIN_CITY', 'Sao Bernardo do Campo'),
+        'origin_uf' => env('EXPEDICAO_ROTAS_ORIGIN_UF', 'SP'),
+        'origin_address' => env('EXPEDICAO_ROTAS_ORIGIN_ADDRESS', 'Bombril, Sao Bernardo do Campo, SP, Brasil'),
+        'country' => env('EXPEDICAO_ROTAS_COUNTRY', 'Brasil'),
+        'cache_days' => (int) env('EXPEDICAO_ROTAS_CACHE_DAYS', 30),
+        'recalculate_per_request' => (int) env('EXPEDICAO_ROTAS_RECALCULATE_PER_REQUEST', 2),
+        'timeout' => (int) env('EXPEDICAO_ROTAS_TIMEOUT', 5),
+        'retry_times' => (int) env('EXPEDICAO_ROTAS_RETRY_TIMES', 1),
+        'user_agent' => env('EXPEDICAO_ROTAS_USER_AGENT', env('APP_NAME', 'Systex WMS') . ' - ' . env('APP_URL', 'http://localhost')),
+    ],
+
 ];

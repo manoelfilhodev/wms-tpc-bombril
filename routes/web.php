@@ -8,6 +8,9 @@ use App\Exports\LogsExport;
 use Illuminate\Routing\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\KitProgramarController;
+use App\Http\Controllers\Expedicao\ApontamentoOperacionalExpedicaoController;
+use App\Http\Controllers\Expedicao\ImportacaoProgramacaoExpedicaoController;
+use App\Http\Controllers\Expedicao\PrevisibilidadeExpedicaoController;
 
 
 use App\Http\Controllers\{
@@ -52,6 +55,21 @@ use App\Http\Controllers\Setores\{
     ExecutarSeparacaoController,
     RecebimentoItemController
 };
+
+Route::middleware(['auth'])->prefix('expedicao')->name('expedicao.')->group(function () {
+    Route::get('/previsibilidade', [PrevisibilidadeExpedicaoController::class, 'index'])
+        ->name('previsibilidade.index');
+    Route::get('/importacao-programacao', [ImportacaoProgramacaoExpedicaoController::class, 'index'])
+        ->name('importacao-programacao.index');
+    Route::post('/importacao-programacao', [ImportacaoProgramacaoExpedicaoController::class, 'store'])
+        ->name('importacao-programacao.store');
+    Route::get('/apontamentos-operacionais', [ApontamentoOperacionalExpedicaoController::class, 'index'])
+        ->middleware('admin')
+        ->name('apontamentos-operacionais.index');
+    Route::post('/programacoes/{fo}/apontamento-operacional', [ApontamentoOperacionalExpedicaoController::class, 'store'])
+        ->middleware('admin')
+        ->name('programacoes.apontamento-operacional.store');
+});
 
 Route::get('/usuarios/buscar', [UserController::class, 'buscarSeparadores'])
     ->name('usuarios.buscar')
