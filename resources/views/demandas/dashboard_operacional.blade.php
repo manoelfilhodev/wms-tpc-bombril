@@ -4,12 +4,17 @@
     <div class="container-fluid px-4 py-3">
         @include('partials.breadcrumb-auto')
 
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h3 class="mb-1 fw-bold text-dark">Dashboard Operacional Picking</h3>
-                <p class="text-muted mb-0 small">Visão em tempo real do Picking</p>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+            <div class="d-flex align-items-center">
+                <div class="icon-wrapper me-3">
+                    <i class="mdi mdi-view-dashboard-outline display-6"></i>
+                </div>
+                <div>
+                    <h3 class="mb-1 fw-bold text-dark">Dashboard Operacional Picking</h3>
+                    <p class="text-muted mb-0 small">Visão em tempo real do Picking</p>
+                </div>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2">
                 <a href="{{ route('demandas.relatorios') }}" class="btn btn-outline-secondary btn-sm">Relatórios</a>
                 <a href="{{ route('demandas.operacional') }}" class="btn btn-outline-secondary btn-sm">Voltar operacional</a>
                 <a href="{{ route('demandas.dashboardOperacional') }}" class="btn btn-outline-secondary btn-sm">Atualizar</a>
@@ -357,6 +362,21 @@
 
         .dashboard-accordion .accordion-body {
             border-top: 1px solid rgba(148, 163, 184, .18);
+        }
+
+        .icon-wrapper {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, .3);
+        }
+
+        .icon-wrapper i {
+            color: #fff !important;
         }
     </style>
     <script>

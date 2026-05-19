@@ -129,8 +129,9 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #111827;
-        border-radius: 8px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, .3);
     }
     .icon-wrapper i { color: #fff !important; }
 </style>

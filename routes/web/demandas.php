@@ -16,6 +16,7 @@ Route::get('/demandas/import', function () {
 Route::prefix('demandas')->middleware(['auth'])->group(function () {
     Route::get('/', [DemandaController::class, 'index'])->name('demandas.index');
     Route::get('/operacional', [DemandaController::class, 'operacional'])->middleware('demanda.perfil:operacional')->name('demandas.operacional');
+    Route::post('/operacional/filtrar-dts', [DemandaController::class, 'filtrarOperacionalDts'])->middleware('demanda.perfil:operacional')->name('demandas.operacional.filtrarDts');
     Route::get('/dashboard-operacional', [DemandaController::class, 'dashboardOperacional'])->middleware('demanda.perfil:operacional')->name('demandas.dashboardOperacional');
     Route::get('/relatorios', [DemandaController::class, 'relatoriosOperacional'])->middleware('demanda.perfil:operacional')->name('demandas.relatorios');
     Route::get('/relatorios/gerencial', [DemandaController::class, 'reportGerencial'])->middleware('demanda.perfil:operacional')->name('demandas.reportGerencial');

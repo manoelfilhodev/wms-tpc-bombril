@@ -69,6 +69,50 @@ class DemandasFiltroStatusMultiploTest extends TestCase
             ->assertSee('Nenhuma DT encontrada com status A separar neste período.');
     }
 
+    public function test_filtro_de_demandas_aceita_multiplas_dts_coladas(): void
+    {
+        $this->actingAs($this->createUser());
+
+        Demanda::create($this->demandaData('DT-MULTI-001', 'A_SEPARAR'));
+        Demanda::create($this->demandaData('DT-MULTI-002', 'A_SEPARAR'));
+        Demanda::create($this->demandaData('DT-MULTI-003', 'A_SEPARAR'));
+
+        $this->get(route('demandas.index', [
+            'fo' => "DT-MULTI-001\nDT-MULTI-002, DT-INEXISTENTE;DT-MULTI-001",
+        ]))
+            ->assertOk()
+            ->assertSee('DT-MULTI-001')
+            ->assertSee('DT-MULTI-002')
+            ->assertDontSee('DT-MULTI-003');
+    }
+
+    public function test_filtro_operacional_salva_lista_de_dts_na_sessao_para_nao_estourar_url(): void
+    {
+        $this->actingAs($this->createUser());
+
+        Demanda::create($this->demandaData('DT-SESSION-001', 'A_SEPARAR', ['possui_sobra' => true]));
+        Demanda::create($this->demandaData('DT-SESSION-002', 'A_SEPARAR', ['possui_sobra' => true]));
+        Demanda::create($this->demandaData('DT-SESSION-003', 'A_SEPARAR', ['possui_sobra' => true]));
+
+        $lista = "DT-SESSION-001\nDT-SESSION-002";
+
+        $this->withSession(['tipo' => 'admin', 'nivel' => 'Admin']);
+
+        $response = $this->post(route('demandas.operacional.filtrarDts'), [
+            'fo' => $lista,
+        ]);
+
+        $response
+            ->assertRedirect(route('demandas.operacional', ['fo_session' => 1]))
+            ->assertSessionHas('demandas.operacional.filtro_fo', $lista);
+
+        $this->get(route('demandas.operacional', ['fo_session' => 1]))
+            ->assertOk()
+            ->assertSee('DT-SESSION-001')
+            ->assertSee('DT-SESSION-002')
+            ->assertDontSee('DT-SESSION-003');
+    }
+
     private function createUser(): User
     {
         $unidadeId = DB::table('_tb_unidades')->insertGetId([

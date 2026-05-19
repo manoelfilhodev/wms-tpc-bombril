@@ -90,7 +90,12 @@
         <!-- Card de Filtros (padrão gestão de estoque) -->
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-body">
-                <form method="GET" action="{{ route('demandas.index') }}" class="row g-3 demanda-filter-form align-items-end" autocomplete="off">
+                <form method="{{ !empty($modoOperacional) ? 'POST' : 'GET' }}"
+                    action="{{ !empty($modoOperacional) ? route('demandas.operacional.filtrarDts') : route('demandas.index') }}"
+                    class="row g-3 demanda-filter-form align-items-end" autocomplete="off">
+                    @if (!empty($modoOperacional))
+                        @csrf
+                    @endif
                     @if (!empty($modoOperacional))
                         <input type="hidden" name="somente_sobra" value="1">
                     @endif
@@ -100,8 +105,8 @@
                             <span class="input-group-text bg-light border-end-0">
                                 <i class="mdi mdi-pound text-muted"></i>
                             </span>
-                            <input type="text" name="fo" class="form-control border-start-0"
-                                placeholder="Digite a DT" value="{{ request('fo') }}">
+                            <textarea name="fo" class="form-control border-start-0 demanda-dt-filter"
+                                placeholder="Digite ou cole as DTs" rows="2">{{ request('fo') }}</textarea>
                         </div>
                     </div>
                     @if (empty($modoOperacional))
@@ -863,6 +868,11 @@
         .form-control:focus {
             border-color: #0d6efd;
             box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.1);
+        }
+
+        .demanda-dt-filter {
+            min-height: 56px;
+            resize: vertical;
         }
 
         .table tbody tr:hover {

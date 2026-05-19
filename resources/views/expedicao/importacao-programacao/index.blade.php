@@ -13,7 +13,6 @@
             color: #f8fafc;
         }
 
-        .prog-import-hero,
         .prog-import-panel,
         .prog-import-summary {
             background: rgba(12, 16, 24, .94);
@@ -21,28 +20,9 @@
             box-shadow: 0 18px 45px rgba(0, 0, 0, .28);
         }
 
-        .prog-import-hero {
-            border-radius: 8px;
-            padding: 22px;
-        }
-
         .prog-import-panel,
         .prog-import-summary {
             border-radius: 8px;
-        }
-
-        .prog-kicker {
-            color: #ef4444;
-            font-size: 12px;
-            font-weight: 800;
-            letter-spacing: .08em;
-            text-transform: uppercase;
-        }
-
-        .prog-title {
-            color: #fff;
-            font-weight: 800;
-            letter-spacing: 0;
         }
 
         .prog-muted {
@@ -90,9 +70,9 @@
 
         .prog-import-page .form-control:focus {
             background: rgba(255, 255, 255, .08);
-            border-color: #ef4444;
+            border-color: #667eea;
             color: #fff;
-            box-shadow: 0 0 0 .2rem rgba(239, 68, 68, .18);
+            box-shadow: 0 0 0 .2rem rgba(102, 126, 234, .18);
         }
 
         .prog-import-page .table {
@@ -103,22 +83,58 @@
         .prog-import-page .table th {
             border-color: rgba(255, 255, 255, .10);
         }
+
+        .prog-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .prog-actions .btn {
+            font-weight: 800;
+        }
+
+        .icon-wrapper {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, .3);
+        }
+
+        .icon-wrapper i {
+            color: #fff !important;
+        }
     </style>
 
-    <div class="prog-import-page">
+    <div class="prog-import-page container-fluid px-4 py-3">
         @include('partials.breadcrumb-auto')
 
-        <div class="prog-import-hero mb-3">
-            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-                <div>
-                    <div class="prog-kicker mb-2">Inteligência Operacional Preditiva</div>
-                    <h2 class="prog-title mb-2">Importar Programação da Expedição</h2>
-                    <p class="prog-muted mb-0">
-                        Atualiza a base PROG por FO/DT SAP sem apagar dados existentes e registra falhas por linha.
-                    </p>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+            <div class="d-flex align-items-center">
+                <div class="icon-wrapper me-3">
+                    <i class="mdi mdi-file-upload-outline display-6"></i>
                 </div>
-                <a href="{{ route('expedicao.previsibilidade.index') }}" class="btn btn-outline-light btn-sm">
-                    <i class="mdi mdi-arrow-left me-1"></i> Previsibilidade
+                <div>
+                    <h3 class="mb-1 fw-bold text-dark">Importar Programação</h3>
+                    <p class="text-muted mb-0 small">Atualiza a base PROG por FO/DT SAP sem apagar dados existentes</p>
+                </div>
+            </div>
+
+            <div class="prog-actions">
+                <a href="{{ route('expedicao.apontamentos-operacionais.index') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="mdi mdi-timer-edit-outline me-1"></i> Apontar Expedição
+                </a>
+
+                <a href="{{ route('expedicao.previsibilidade.index') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="mdi mdi-monitor-dashboard me-1"></i> Painel
+                </a>
+
+                <a href="{{ route('expedicao.importacao-programacao.index') }}" class="btn btn-primary btn-sm">
+                    <i class="mdi mdi-file-upload-outline me-1"></i> Importar PROG
                 </a>
             </div>
         </div>
@@ -159,7 +175,7 @@
                             </div>
                         </div>
 
-                        <button type="submit" class="btn btn-danger w-100">
+                        <button type="submit" class="btn btn-primary w-100">
                             <i class="mdi mdi-upload me-1"></i> Importar Programação
                         </button>
                     </form>
@@ -210,7 +226,7 @@
 
                 @if (! empty($resumo['colunas_detectadas']))
                     <div class="mb-3">
-                        <div class="prog-kicker mb-2">Colunas detectadas</div>
+                        <div class="text-uppercase fw-bold small text-muted mb-2">Colunas detectadas</div>
                         <div class="d-flex flex-wrap gap-2">
                             @foreach (array_slice($resumo['colunas_detectadas'], 0, 28) as $coluna)
                                 <span class="prog-chip">{{ $coluna }}</span>

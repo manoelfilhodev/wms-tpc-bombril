@@ -62,6 +62,8 @@ class PrevisibilidadeExpedicaoController extends Controller
                 'separacao' => [
                     'label' => 'Separação',
                     'previsto' => optional($programacao->ultimaPrevisao)->tempo_separacao_min,
+                    'inicio_previsto' => optional($programacao->ultimaPrevisao)->previsao_inicio_separacao,
+                    'prazo' => optional($programacao->ultimaPrevisao)->previsao_inicio_conferencia,
                     'inicio' => $demanda->separacao_iniciada_em ?? null,
                     'fim' => $demanda->separacao_finalizada_em ?? null,
                     'limite' => 480, // 8h
@@ -70,6 +72,8 @@ class PrevisibilidadeExpedicaoController extends Controller
                 'conferencia' => [
                     'label' => 'Conferência',
                     'previsto' => optional($programacao->ultimaPrevisao)->tempo_conferencia_min,
+                    'inicio_previsto' => optional($programacao->ultimaPrevisao)->previsao_inicio_conferencia,
+                    'prazo' => optional($programacao->ultimaPrevisao)->previsao_inicio_carregamento,
                     'inicio' => $demanda->conferencia_iniciada_em ?? null,
                     'fim' => $demanda->conferencia_finalizada_em ?? null,
                     'limite' => 240, // 4h
@@ -78,6 +82,8 @@ class PrevisibilidadeExpedicaoController extends Controller
                 'carregamento' => [
                     'label' => 'Carregamento',
                     'previsto' => optional($programacao->ultimaPrevisao)->tempo_carregamento_min,
+                    'inicio_previsto' => optional($programacao->ultimaPrevisao)->previsao_inicio_carregamento,
+                    'prazo' => optional($programacao->ultimaPrevisao)->previsao_saida_caminhao,
                     'inicio' => $demanda->carregamento_iniciado_em ?? null,
                     'fim' => $demanda->carregamento_finalizado_em ?? null,
                     'limite' => 240, // 4h
@@ -86,6 +92,8 @@ class PrevisibilidadeExpedicaoController extends Controller
 
             $desvioAcumuladoMin = 0;
             $possuiAnomaliaOperacional = false;
+            $projecaoFimEtapaAnterior = null;
+            $agora = now();
 
             foreach ($etapas as $chave => $etapa) {
 
@@ -93,6 +101,11 @@ class PrevisibilidadeExpedicaoController extends Controller
                 $desvioMin = null;
                 $status = 'SEM_REALIZADO';
                 $motivoAnomalia = null;
+                $inicioPrevisto = $etapa['inicio_previsto'] ? Carbon::parse($etapa['inicio_previsto']) : null;
+                $prazo = $etapa['prazo'] ? Carbon::parse($etapa['prazo']) : null;
+                $inicioReal = $etapa['inicio'] ? Carbon::parse($etapa['inicio']) : null;
+                $fimReal = $etapa['fim'] ? Carbon::parse($etapa['fim']) : null;
+                $fimProjetado = null;
 
                 /*
                 |--------------------------------------------------------------------------
@@ -122,27 +135,60 @@ class PrevisibilidadeExpedicaoController extends Controller
 
                 /*
                 |--------------------------------------------------------------------------
-                | ETAPA VÁLIDA
+                | PROJEÇÃO POR PRAZO
                 |--------------------------------------------------------------------------
                 */
 
-                elseif ($validacao['valido']) {
+                else {
 
-                    $realizadoMin = $validacao['realizado_min'];
+                    if ($validacao['valido']) {
+                        $realizadoMin = $validacao['realizado_min'];
+                    }
 
                     $previstoMin = (int) ($etapa['previsto'] ?? 0);
 
-                    $desvioMin = $realizadoMin - $previstoMin;
+                    $inicioProjetado = $inicioPrevisto?->copy();
 
-                    if ($desvioMin <= 0) {
+                    if ($projecaoFimEtapaAnterior && (! $inicioProjetado || $projecaoFimEtapaAnterior->greaterThan($inicioProjetado))) {
+                        $inicioProjetado = $projecaoFimEtapaAnterior->copy();
+                    }
 
-                        $status = 'DENTRO_PREVISTO';
+                    if ($inicioReal && (! $inicioProjetado || $inicioReal->greaterThan($inicioProjetado))) {
+                        $inicioProjetado = $inicioReal->copy();
+                    }
 
-                    } else {
+                    if (! $inicioProjetado && $previstoMin > 0) {
+                        $inicioProjetado = $agora->copy();
+                    }
 
+                    if ($fimReal) {
+                        $fimProjetado = $fimReal->copy();
+                    } elseif ($inicioProjetado && $previstoMin > 0) {
+                        if ($agora->greaterThan($inicioProjetado)) {
+                            $inicioProjetado = $agora->copy();
+                        }
+
+                        $fimProjetado = $inicioProjetado->copy()->addMinutes($previstoMin);
+
+                        if ($inicioReal && $agora->greaterThan($fimProjetado)) {
+                            $fimProjetado = $agora->copy();
+                        }
+                    }
+
+                    if ($prazo && $fimProjetado) {
+                        $desvioMin = (int) ceil($prazo->diffInMinutes($fimProjetado, false));
+                        $status = $desvioMin > 0 ? 'FORA_PREVISTO' : 'DENTRO_PREVISTO';
+                    } elseif ($prazo && $agora->greaterThan($prazo)) {
+                        $desvioMin = (int) ceil($prazo->diffInMinutes($agora, false));
                         $status = 'FORA_PREVISTO';
+                    }
 
-                        $desvioAcumuladoMin += $desvioMin;
+                    if ($status === 'FORA_PREVISTO' && $desvioMin > 0) {
+                        $desvioAcumuladoMin = max($desvioAcumuladoMin, $desvioMin);
+                    }
+
+                    if ($fimProjetado) {
+                        $projecaoFimEtapaAnterior = $fimProjetado->copy();
                     }
                 }
 
@@ -154,6 +200,8 @@ class PrevisibilidadeExpedicaoController extends Controller
 
                 $etapas[$chave]['realizado'] = $realizadoMin;
                 $etapas[$chave]['desvio'] = $desvioMin;
+                $etapas[$chave]['prazo'] = $prazo;
+                $etapas[$chave]['fim_projetado'] = $fimProjetado;
                 $etapas[$chave]['status'] = $status;
                 $etapas[$chave]['motivo_anomalia'] = $motivoAnomalia;
             }
@@ -192,17 +240,17 @@ class PrevisibilidadeExpedicaoController extends Controller
                     $programacao->ultimaPrevisao->previsao_saida_caminhao
                 );
 
-                $saidaProjetada = $saidaPrevistaOriginal
-                    ->copy()
-                    ->addMinutes($desvioAcumuladoMin);
+                $saidaProjetada = $projecaoFimEtapaAnterior
+                    ? $projecaoFimEtapaAnterior->copy()
+                    : $saidaPrevistaOriginal->copy();
 
                 $programacao->saida_projetada_em = $saidaProjetada;
 
                 $programacao->desvio_saida_min =
-                    $saidaPrevistaOriginal->diffInMinutes(
+                    (int) ceil($saidaPrevistaOriginal->diffInMinutes(
                         $saidaProjetada,
                         false
-                    );
+                    ));
 
                 $programacao->status_saida_projetada =
                     $programacao->desvio_saida_min > 0

@@ -16,6 +16,11 @@
 
             return $sinal . floor(abs($minutos) / 60) . ':' . str_pad(abs($minutos) % 60, 2, '0', STR_PAD_LEFT);
         }
+
+        function dataHoraBoard($dataHora)
+        {
+            return $dataHora ? \Carbon\Carbon::parse($dataHora)->format('d/m H:i') : '--/-- --:--';
+        }
     @endphp
 
     <style>
@@ -539,6 +544,15 @@
             font-weight: 900;
             line-height: 1;
             color: #fff;
+        }
+
+        .stage-meta {
+            margin-top: 5px;
+            color: rgba(215, 227, 239, .62);
+            font-size: clamp(9px, .66vw, 11px);
+            font-weight: 800;
+            line-height: 1.25;
+            text-transform: uppercase;
         }
 
         .stage-pill {
@@ -1160,11 +1174,13 @@
                             <div class="stage-box {{ $stageClass }}">
 
                                 <div class="stage-label">
-                                    Planejado
+                                    Prazo
                                 </div>
 
                                 <div class="stage-time">
-                                    {{ tempoBoard($etapa['previsto'] ?? null) }}
+                                    {{ ($etapa['prazo'] ?? null)?->format('d/m') ?? '--/--' }}
+                                    <br>
+                                    {{ ($etapa['prazo'] ?? null)?->format('H:i') ?? '--:--' }}
                                 </div>
 
                                 <div class="stage-label">
@@ -1175,9 +1191,18 @@
                                     {{ tempoBoard($etapa['realizado'] ?? null) }}
                                 </div>
 
+                                @if (($etapa['fim'] ?? null) || ($etapa['realizado'] ?? null) !== null)
+                                    <div class="stage-meta">
+                                        {{ dataHoraBoard($etapa['fim'] ?? null) }}
+                                        @if (($etapa['realizado'] ?? null) !== null)
+                                            • duração {{ tempoBoard($etapa['realizado']) }}
+                                        @endif
+                                    </div>
+                                @endif
+
                                 @if ($status === 'FORA_PREVISTO')
                                     <span class="stage-pill pill-danger">
-                                        +{{ tempoBoard($etapa['desvio'] ?? null) }}
+                                        Atraso {{ tempoBoard($etapa['desvio'] ?? null) }}
                                     </span>
                                 @elseif($status === 'DENTRO_PREVISTO')
                                     <span class="stage-pill pill-ok">
@@ -1281,7 +1306,7 @@
                                 </span>
                             @elseif ($desvioSaida > 0)
                                 <span class="stage-pill pill-danger">
-                                    +{{ tempoBoard($desvioSaida) }}
+                                    Atraso {{ tempoBoard($desvioSaida) }}
                                 </span>
                             @elseif($programacao->saida_projetada_em)
                                 <span class="stage-pill pill-ok">

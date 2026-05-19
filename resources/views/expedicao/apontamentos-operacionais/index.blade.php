@@ -8,21 +8,12 @@
             color: #f8fafc;
         }
 
-        .exp-ops-header,
         .exp-ops-filter,
         .exp-ops-table-wrap {
             background: rgba(12, 16, 24, .94);
             border: 1px solid rgba(255, 255, 255, .10);
             border-radius: 8px;
             box-shadow: 0 18px 45px rgba(0, 0, 0, .24);
-        }
-
-        .exp-ops-kicker {
-            color: #ef4444;
-            font-size: 12px;
-            font-weight: 800;
-            letter-spacing: .08em;
-            text-transform: uppercase;
         }
 
         .exp-ops-muted {
@@ -39,9 +30,9 @@
         .exp-ops-page .form-control:focus,
         .exp-ops-page .form-select:focus {
             background: rgba(255, 255, 255, .08);
-            border-color: #ef4444;
+            border-color: #667eea;
             color: #fff;
-            box-shadow: 0 0 0 .2rem rgba(239, 68, 68, .18);
+            box-shadow: 0 0 0 .2rem rgba(102, 126, 234, .18);
         }
 
         .exp-ops-page .form-select option {
@@ -110,20 +101,58 @@
             white-space: nowrap;
             font-weight: 800;
         }
+
+        .exp-ops-shortcuts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .exp-ops-shortcuts .btn {
+            font-weight: 800;
+        }
+
+        .icon-wrapper {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, .3);
+        }
+
+        .icon-wrapper i {
+            color: #fff !important;
+        }
     </style>
 
-    <div class="exp-ops-page">
+    <div class="exp-ops-page container-fluid px-4 py-3">
         @include('partials.breadcrumb-auto')
 
-        <div class="exp-ops-header p-3 mb-3">
-            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-                <div>
-                    <div class="exp-ops-kicker mb-2">Administração da Expedição</div>
-                    <h3 class="text-white fw-bold mb-1">Apontar Conferência e Carregamento</h3>
-                    <p class="exp-ops-muted mb-0">Tela operacional temporária para lançar tempos reais enquanto a automação não entra.</p>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+            <div class="d-flex align-items-center">
+                <div class="icon-wrapper me-3">
+                    <i class="mdi mdi-truck-fast-outline display-6"></i>
                 </div>
-                <a href="{{ route('expedicao.previsibilidade.index') }}" class="btn btn-outline-light btn-sm">
-                    <i class="mdi mdi-monitor-dashboard me-1"></i> Ver Painel
+                <div>
+                    <h3 class="mb-1 fw-bold text-dark">Apontar Expedição</h3>
+                    <p class="text-muted mb-0 small">Lançamento operacional dos tempos reais da expedição</p>
+                </div>
+            </div>
+
+            <div class="exp-ops-shortcuts">
+                <a href="{{ route('expedicao.apontamentos-operacionais.index') }}" class="btn btn-primary btn-sm">
+                    <i class="mdi mdi-timer-edit-outline me-1"></i> Apontar Expedição
+                </a>
+
+                <a href="{{ route('expedicao.previsibilidade.index') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="mdi mdi-monitor-dashboard me-1"></i> Painel
+                </a>
+
+                <a href="{{ route('expedicao.importacao-programacao.index') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="mdi mdi-file-upload-outline me-1"></i> Importar PROG
                 </a>
             </div>
         </div>
@@ -166,7 +195,7 @@
                     </select>
                 </div>
                 <div class="col-md-3 d-flex gap-2">
-                    <button type="submit" class="btn btn-danger flex-fill">
+                    <button type="submit" class="btn btn-primary flex-fill">
                         <i class="mdi mdi-filter-outline me-1"></i> Filtrar
                     </button>
                     <a href="{{ route('expedicao.apontamentos-operacionais.index') }}" class="btn btn-outline-light">

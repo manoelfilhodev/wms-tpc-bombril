@@ -8,7 +8,7 @@
 
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
         <div class="d-flex align-items-center">
-            <div class="stretch-icon me-3">
+            <div class="icon-wrapper me-3">
                 <i class="mdi mdi-barcode-scan display-6"></i>
             </div>
             <div>
@@ -162,17 +162,19 @@
 </div>
 
 <style>
-    .stretch-icon {
+    .icon-wrapper {
         width: 60px;
         height: 60px;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #111827;
-        color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 8px;
-        box-shadow: 0 8px 20px rgba(17, 24, 39, 0.18);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, .3);
+    }
+
+    .icon-wrapper i {
+        color: #fff !important;
     }
 
     .stretch-page .card {
@@ -181,8 +183,8 @@
     }
 
     .stretch-page .form-control:focus {
-        border-color: #dc3545;
-        box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.12);
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.14);
     }
 
     .stretch-submit {

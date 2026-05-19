@@ -37,7 +37,13 @@ class DemandaController extends Controller
         $query = Demanda::query();
 
         if ($request->filled('fo')) {
-            $query->where('fo', 'like', "%{$request->fo}%");
+            $dts = $this->parseFiltroDts($request->input('fo'));
+
+            if (count($dts) > 1) {
+                $query->whereIn('fo', $dts);
+            } elseif (count($dts) === 1) {
+                $query->where('fo', 'like', "%{$dts[0]}%");
+            }
         }
 
         if ($request->filled('transportadora') && ! $request->boolean('somente_sobra')) {
@@ -461,8 +467,38 @@ class DemandaController extends Controller
 
     public function operacional(Request $request)
     {
+        if ($request->boolean('fo_session')) {
+            $request->merge([
+                'fo' => $request->session()->get('demandas.operacional.filtro_fo', ''),
+            ]);
+        }
+
         $request->merge(['somente_sobra' => 1]);
         return $this->index($request);
+    }
+
+    public function filtrarOperacionalDts(Request $request)
+    {
+        $request->session()->put('demandas.operacional.filtro_fo', (string) $request->input('fo', ''));
+
+        $query = $request->except(['_token', 'fo', 'somente_sobra', 'page']);
+        $query['fo_session'] = 1;
+
+        return redirect()->route('demandas.operacional', $query);
+    }
+
+    private function parseFiltroDts(?string $valor): array
+    {
+        if ($valor === null) {
+            return [];
+        }
+
+        return collect(preg_split('/[\s,;]+/', $valor, -1, PREG_SPLIT_NO_EMPTY))
+            ->map(fn ($dt) => trim($dt))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public function updateStage(Request $request, $id)

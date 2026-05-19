@@ -30,36 +30,10 @@
                     </a>
                 </li>
                 <li class="side-nav-item">
-                    <a href="{{ route('expedicao.previsibilidade.index') }}"
-                        class="side-nav-link {{ request()->routeIs('expedicao.previsibilidade.*') ? 'active' : '' }}">
-
+                    <a href="{{ route('expedicao.apontamentos-operacionais.index') }}"
+                        class="side-nav-link {{ request()->routeIs('expedicao.*') ? 'active' : '' }}">
                         <i class="mdi mdi-truck-fast-outline"></i>
-
-                        <span> Painel Expedição </span>
-                    </a>
-                </li>
-                <li class="side-nav-item">
-                    <a href="{{ route('expedicao.importacao-programacao.index') }}"
-                        class="side-nav-link {{ request()->routeIs('expedicao.importacao-programacao.*') ? 'active' : '' }}">
-                        <i class="mdi mdi-file-upload-outline"></i>
-                        <span> Importar PROG </span>
-                    </a>
-                </li>
-                @if (session('tipo') === 'admin')
-                    <li class="side-nav-item">
-                        <a href="{{ route('expedicao.apontamentos-operacionais.index') }}"
-                            class="side-nav-link {{ request()->routeIs('expedicao.apontamentos-operacionais.*') ? 'active' : '' }}">
-                            <i class="mdi mdi-timer-edit-outline"></i>
-                            <span> Apontar Expedição </span>
-                        </a>
-                    </li>
-                @endif
-
-                <li class="side-nav-item">
-                    <a href="{{ route('demandas.relatorios') }}"
-                        class="side-nav-link {{ request()->routeIs('demandas.relatorios') ? 'active' : '' }}">
-                        <i class="mdi mdi-file-chart-outline"></i>
-                        <span> Relatorios </span>
+                        <span> Expedição </span>
                     </a>
                 </li>
 
@@ -70,6 +44,16 @@
                         <span> Palete Stretch </span>
                     </a>
                 </li>
+
+                <li class="side-nav-item">
+                    <a href="{{ route('demandas.relatorios') }}"
+                        class="side-nav-link {{ request()->routeIs('demandas.relatorios') ? 'active' : '' }}">
+                        <i class="mdi mdi-file-chart-outline"></i>
+                        <span> Relatorios </span>
+                    </a>
+                </li>
+
+                
 
                 <li class="side-nav-item">
                     <a href="{{ route('painel.tv') }}" target="_blank" rel="noopener" class="side-nav-link">
