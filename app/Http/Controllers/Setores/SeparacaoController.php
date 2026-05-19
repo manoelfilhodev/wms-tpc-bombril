@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Setores\Separacao;
 use App\Models\Setores\SeparacaoItem;
 use App\Models\Setores\Pedido;
+use App\Services\SystemLogService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 
@@ -126,7 +127,7 @@ public function liberarPosicao($posicaoId)
             'endereco' => 'required|string|max:50',
         ]);
 
-        Separacao::create([
+        $separacao = Separacao::create([
             'pedido' => $request->pedido,
             'sku' => $sku,
             'quantidade' => $request->quantidade,
@@ -148,6 +149,21 @@ public function liberarPosicao($posicaoId)
             'ip_address' => request()->ip(),
             'navegador' => request()->header('User-Agent'),
             'created_at' => now()
+        ]);
+
+        SystemLogService::record([
+            'module' => 'separacao',
+            'action' => 'lancamento_manual_kit_realizado',
+            'description' => "Usuário realizou lançamento manual de separação kit para o SKU {$sku}.",
+            'entity_type' => 'separacao',
+            'entity_id' => $separacao->id,
+            'new_values' => [
+                'pedido' => $request->pedido,
+                'sku' => $sku,
+                'quantidade' => (int) $request->quantidade,
+                'endereco' => $endereco,
+                'observacoes' => $request->observacoes,
+            ],
         ]);
 
         return back()->with('success', 'Item separado com sucesso!');
@@ -265,7 +281,7 @@ public function liberarPosicao($posicaoId)
             return back()->with('error', 'PosiПлоПлкo de estoque nПлкo encontrada no sistema.');
         }
 
-        Separacao::create([
+        $separacao = Separacao::create([
             'pedido' => $pedido,
             'sku' => $sku,
             'quantidade' => $request->quantidade,
@@ -287,6 +303,21 @@ public function liberarPosicao($posicaoId)
             'ip_address' => request()->ip(),
             'navegador' => request()->header('User-Agent'),
             'created_at' => now()
+        ]);
+
+        SystemLogService::record([
+            'module' => 'separacao',
+            'action' => 'lancamento_manual_realizado',
+            'description' => "Usuário realizou lançamento manual de separação para o SKU {$sku}.",
+            'entity_type' => 'separacao',
+            'entity_id' => $separacao->id,
+            'new_values' => [
+                'pedido' => $pedido,
+                'sku' => $sku,
+                'quantidade' => (int) $request->quantidade,
+                'endereco' => $endereco,
+                'observacoes' => $request->observacoes,
+            ],
         ]);
 
         return back()->with('success', 'Item separado com sucesso!');

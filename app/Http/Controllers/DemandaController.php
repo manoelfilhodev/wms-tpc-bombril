@@ -11,6 +11,7 @@ use App\Exports\DemandasExport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\DemandaHistory;
 use App\Services\DashboardService;
+use App\Services\SystemLogService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
@@ -258,6 +259,7 @@ class DemandaController extends Controller
         $request->validate(['status' => 'required|string']);
 
         $demanda = Demanda::findOrFail($id);
+        $oldValues = $demanda->only(['status']);
         $demanda->status = $request->status;
         $demanda->save();
 
@@ -266,6 +268,16 @@ class DemandaController extends Controller
             'demanda_id' => $demanda->id,
             'status' => $request->status,
             'changed_by' => auth()->user()->id_user ?? null,
+        ]);
+
+        SystemLogService::record([
+            'module' => 'separacao',
+            'action' => 'status_alterado',
+            'description' => "Status da DT {$demanda->fo} alterado para {$request->status}.",
+            'entity_type' => 'demanda',
+            'entity_id' => $demanda->id,
+            'old_values' => $oldValues,
+            'new_values' => $demanda->only(['status', 'fo']),
         ]);
 
         return back()->with('success', "Status da FO {$demanda->fo} atualizado!");
@@ -413,11 +425,35 @@ class DemandaController extends Controller
             : '';
 
         if ($itensImportados === 0 && $totalDtsDuplicadas > 0) {
+            SystemLogService::record([
+                'module' => 'importacao',
+                'action' => 'importacao_explosao_bloqueada',
+                'description' => 'Importação da explosão bloqueada por duplicidade de DTs.',
+                'entity_type' => 'demanda',
+                'new_values' => [
+                    'dts_duplicadas' => $totalDtsDuplicadas,
+                    'amostra' => collect(array_keys($dtsIgnoradasDuplicidade))->sort()->take(20)->values()->all(),
+                ],
+            ]);
+
             return back()->with(
                 'error',
                 "Importação bloqueada. As DTs da planilha já existem no sistema e não foram sobrescritas.{$sufixoDuplicidade}"
             );
         }
+
+        SystemLogService::record([
+            'module' => 'importacao',
+            'action' => 'importacao_explosao_realizada',
+            'description' => 'Usuário importou a explosão de demandas.',
+            'entity_type' => 'demanda',
+            'new_values' => [
+                'itens_importados' => $itensImportados,
+                'itens_ignorados_bloqueio' => $itensIgnoradosBloqueio,
+                'dts_com_sobra' => $dtsComSobra,
+                'dts_duplicadas' => $totalDtsDuplicadas,
+            ],
+        ]);
 
         return back()->with(
             'success',
@@ -626,7 +662,10 @@ class DemandaController extends Controller
             return back()->with('error', "Quantidade de SKUs inválida. Restante disponível para distribuição: {$skusRestantes} SKU(s).");
         }
 
-        DB::transaction(function () use ($demanda, $linhasDistribuicao) {
+        $distribuicoesRegistradas = [];
+        $oldValues = $demanda->only(['fo', 'status', 'separacao_iniciada_em']);
+
+        DB::transaction(function () use ($demanda, $linhasDistribuicao, &$distribuicoesRegistradas) {
             foreach ($linhasDistribuicao as $linha) {
                 $distribuicaoAberta = DemandaDistribuicao::query()
                     ->where('demanda_id', $demanda->id)
@@ -635,17 +674,28 @@ class DemandaController extends Controller
                     ->first();
 
                 if ($distribuicaoAberta) {
+                    $antes = $distribuicaoAberta->only(['id', 'separador_nome', 'quantidade_pecas', 'quantidade_skus']);
                     $distribuicaoAberta->update([
                         'quantidade_pecas' => $distribuicaoAberta->quantidade_pecas + $linha['quantidade_pecas'],
                         'quantidade_skus' => $distribuicaoAberta->quantidade_skus + $linha['quantidade_skus'],
                     ]);
+                    $distribuicoesRegistradas[] = [
+                        'tipo' => 'incremento',
+                        'old' => $antes,
+                        'new' => $distribuicaoAberta->fresh()->only(['id', 'separador_nome', 'quantidade_pecas', 'quantidade_skus']),
+                    ];
                 } else {
-                    DemandaDistribuicao::create([
+                    $novaDistribuicao = DemandaDistribuicao::create([
                         'demanda_id' => $demanda->id,
                         'separador_nome' => $linha['separador_nome'],
                         'quantidade_pecas' => $linha['quantidade_pecas'],
                         'quantidade_skus' => $linha['quantidade_skus'],
                     ]);
+                    $distribuicoesRegistradas[] = [
+                        'tipo' => 'nova',
+                        'old' => null,
+                        'new' => $novaDistribuicao->only(['id', 'separador_nome', 'quantidade_pecas', 'quantidade_skus']),
+                    ];
                 }
             }
 
@@ -656,6 +706,21 @@ class DemandaController extends Controller
                 ]);
             }
         });
+
+        SystemLogService::record([
+            'module' => 'separacao',
+            'action' => 'distribuicao_dt_realizada',
+            'description' => "Usuário distribuiu peças/SKUs da DT {$demanda->fo}.",
+            'entity_type' => 'demanda',
+            'entity_id' => $demanda->id,
+            'old_values' => $oldValues,
+            'new_values' => [
+                'dt' => $demanda->fo,
+                'distribuicoes' => $distribuicoesRegistradas,
+                'total_pecas_distribuidas' => $qtd,
+                'total_skus_distribuidos' => $qtdSkus,
+            ],
+        ]);
 
         $totalLinhas = $linhasDistribuicao->count();
         $mensagem = $totalLinhas === 1
@@ -685,6 +750,8 @@ class DemandaController extends Controller
             return back()->with('error', "Não existe distribuição em aberto para o separador {$separadorNome} na DT {$demanda->fo}.");
         }
 
+        $oldValues = $distribuicao->only(['id', 'separador_nome', 'quantidade_pecas', 'quantidade_skus', 'finalizado_em', 'resultado']);
+
         $distribuicao->update([
             'finalizado_em' => now(),
             'resultado' => $request->resultado,
@@ -702,6 +769,19 @@ class DemandaController extends Controller
                 'status' => $temParcial ? 'A_CONFERIR' : 'CONFERIDO',
             ]);
         }
+
+        SystemLogService::record([
+            'module' => 'separacao',
+            'action' => 'separador_finalizado',
+            'description' => "Separador {$separadorNome} finalizado na DT {$demanda->fo} como {$request->resultado}.",
+            'entity_type' => 'demanda_distribuicao',
+            'entity_id' => $distribuicao->id,
+            'old_values' => $oldValues,
+            'new_values' => array_merge(
+                $distribuicao->fresh()->only(['id', 'separador_nome', 'quantidade_pecas', 'quantidade_skus', 'finalizado_em', 'resultado']),
+                ['dt' => $demanda->fo, 'demanda_id' => $demanda->id]
+            ),
+        ]);
 
         return back()->with('success', "Separador {$separadorNome} finalizado na DT {$demanda->fo} ({$request->resultado}).");
     }
@@ -761,9 +841,21 @@ class DemandaController extends Controller
             return back()->with('error', "Quantidade de SKUs inválida. Máximo permitido para esta redistribuição: {$limiteSkus} SKU(s).");
         }
 
+        $oldValues = $distribuicao->only(['id', 'separador_nome', 'quantidade_pecas', 'quantidade_skus', 'finalizado_em', 'resultado']);
+
         if ($novaQtdPecas === 0 && $novaQtdSkus === 0) {
             $separadorNome = $distribuicao->separador_nome;
             $distribuicao->delete();
+
+            SystemLogService::record([
+                'module' => 'separacao',
+                'action' => 'distribuicao_removida',
+                'description' => "Distribuição de {$separadorNome} removida na DT {$demanda->fo}.",
+                'entity_type' => 'demanda_distribuicao',
+                'entity_id' => $distribuicao->id,
+                'old_values' => $oldValues,
+                'new_values' => ['dt' => $demanda->fo, 'demanda_id' => $demanda->id, 'removida' => true],
+            ]);
 
             return back()->with('success', "Distribuição de {$separadorNome} removida. O saldo voltou para redistribuição.");
         }
@@ -771,6 +863,19 @@ class DemandaController extends Controller
         $distribuicao->update([
             'quantidade_pecas' => $novaQtdPecas,
             'quantidade_skus' => $novaQtdSkus,
+        ]);
+
+        SystemLogService::record([
+            'module' => 'separacao',
+            'action' => 'distribuicao_redistribuida',
+            'description' => "Distribuição de {$distribuicao->separador_nome} redistribuída na DT {$demanda->fo}.",
+            'entity_type' => 'demanda_distribuicao',
+            'entity_id' => $distribuicao->id,
+            'old_values' => $oldValues,
+            'new_values' => array_merge(
+                $distribuicao->fresh()->only(['id', 'separador_nome', 'quantidade_pecas', 'quantidade_skus', 'finalizado_em', 'resultado']),
+                ['dt' => $demanda->fo, 'demanda_id' => $demanda->id]
+            ),
         ]);
 
         return back()->with('success', "Distribuição de {$distribuicao->separador_nome} atualizada. Saldo disponível recalculado.");
@@ -792,6 +897,7 @@ class DemandaController extends Controller
         }
 
         $separadorIds = array_values(array_unique(array_map('intval', (array) request('separador_ids', []))));
+        $oldValues = $demanda->only(['status', 'separador_id', 'separacao_iniciada_em', 'separacao_finalizada_em', 'separacao_resultado']);
         $demanda->update([
             'separador_id' => $separadorIds[0] ?? $demanda->separador_id,
             'separacao_iniciada_em' => now(),
@@ -802,6 +908,19 @@ class DemandaController extends Controller
         if (!empty($separadorIds)) {
             $demanda->separadores()->sync($separadorIds);
         }
+
+        SystemLogService::record([
+            'module' => 'separacao',
+            'action' => 'separacao_iniciada',
+            'description' => "Separação da DT {$demanda->fo} iniciada.",
+            'entity_type' => 'demanda',
+            'entity_id' => $demanda->id,
+            'old_values' => $oldValues,
+            'new_values' => array_merge(
+                $demanda->only(['fo', 'status', 'separador_id', 'separacao_iniciada_em', 'separacao_finalizada_em', 'separacao_resultado']),
+                ['separador_ids' => $separadorIds]
+            ),
+        ]);
 
         return back()->with('success', "Separação da DT {$demanda->fo} iniciada.");
     }
@@ -825,10 +944,21 @@ class DemandaController extends Controller
         if ($demanda->separacao_finalizada_em) {
             return back()->with('error', "A DT {$demanda->fo} já foi finalizada.");
         }
+        $oldValues = $demanda->only(['status', 'separacao_iniciada_em', 'separacao_finalizada_em', 'separacao_resultado']);
         $demanda->separacao_finalizada_em = now();
         $demanda->separacao_resultado = $request->resultado;
         $demanda->status = $request->resultado === 'COMPLETA' ? 'CONFERIDO' : 'A_CONFERIR';
         $demanda->save();
+
+        SystemLogService::record([
+            'module' => 'separacao',
+            'action' => 'separacao_finalizada',
+            'description' => "Separação da DT {$demanda->fo} finalizada como {$request->resultado}.",
+            'entity_type' => 'demanda',
+            'entity_id' => $demanda->id,
+            'old_values' => $oldValues,
+            'new_values' => $demanda->only(['fo', 'status', 'separacao_iniciada_em', 'separacao_finalizada_em', 'separacao_resultado']),
+        ]);
 
         return back()->with('success', "Separação da DT {$demanda->fo} finalizada como {$request->resultado}.");
     }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Expedicao;
 
 use App\Http\Controllers\Controller;
 use App\Services\Expedicao\ImportacaoProgramacaoExpedicaoService;
+use App\Services\SystemLogService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -55,6 +56,17 @@ class ImportacaoProgramacaoExpedicaoController extends Controller
 
         try {
             $resumo = $service->importar($request->file('arquivo'));
+
+            SystemLogService::record([
+                'module' => 'importacao',
+                'action' => 'importacao_programacao_realizada',
+                'description' => 'Usuário importou a programação de expedição.',
+                'entity_type' => 'expedicao_programacao',
+                'new_values' => [
+                    'arquivo' => $request->file('arquivo')?->getClientOriginalName(),
+                    'resumo' => $resumo,
+                ],
+            ]);
 
             return back()
                 ->with('success', 'Importação da programação concluída.')

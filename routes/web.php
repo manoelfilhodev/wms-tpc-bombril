@@ -516,6 +516,14 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::patch('/dispositivos/{dispositivo}/status', [DispositivoAutorizadoController::class, 'toggle'])->name('dispositivos.toggle');
 });
 
+Route::middleware(['auth', 'admin'])
+    ->prefix('admin')
+    ->name('admin.')
+    ->group(function () {
+        Route::get('/logs', [\App\Http\Controllers\Admin\SystemLogController::class, 'index'])
+            ->name('logs.index');
+    });
+
 Route::prefix('setores')->middleware('auth')->group(function () {
     Route::prefix('recebimento')->group(function () {
         Route::get('/conferencia', [RecebimentoController::class, 'index'])->name('recebimento.index');

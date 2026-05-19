@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\DeviceAuthorizationService;
+use App\Services\SystemLogService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -58,6 +59,19 @@ class AuthController extends Controller
         if (! Auth::attempt($credentials)) {
             $usuario = User::where('email', $credentials['email'])->first();
 
+            SystemLogService::record([
+                'user_id' => $usuario?->id_user,
+                'user_name' => $usuario?->nome,
+                'user_email' => $credentials['email'],
+                'user_role' => $usuario ? trim(($usuario->tipo ?? '') . ' / ' . ($usuario->nivel ?? '')) : null,
+                'module' => 'login',
+                'action' => 'login_invalido',
+                'description' => 'Tentativa de login inválida.',
+                'entity_type' => 'usuario',
+                'entity_id' => $usuario?->id_user,
+                'new_values' => ['email' => $credentials['email']],
+            ]);
+
             if ($usuario && $usuario->id_user && $usuario->unidade_id) {
                 $this->insertUserLog(
                     (int) $usuario->id_user,
@@ -92,6 +106,15 @@ class AuthController extends Controller
                 $request
             );
         }
+
+        SystemLogService::record([
+            'module' => 'login',
+            'action' => 'login_realizado',
+            'description' => 'Usuário realizou login no sistema.',
+            'entity_type' => 'usuario',
+            'entity_id' => $usuario->id_user,
+            'new_values' => ['email' => $usuario->email, 'device_id' => $deviceId ?: null],
+        ]);
 
         $redirect = $usuario->tipo === 'operador'
             ? redirect()->route('painel.operador')
@@ -129,6 +152,14 @@ class AuthController extends Controller
                 $request
             );
         }
+
+        SystemLogService::record([
+            'module' => 'login',
+            'action' => 'logout',
+            'description' => 'Usuário encerrou a sessão manualmente.',
+            'entity_type' => 'usuario',
+            'entity_id' => $user->id_user,
+        ]);
 
         Auth::logout();
         $request->session()->invalidate();

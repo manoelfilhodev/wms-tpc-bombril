@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Expedicao;
 use App\Http\Controllers\Controller;
 use App\Models\Demanda;
 use App\Models\Expedicao\ExpedicaoProgramacao;
+use App\Services\SystemLogService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -94,6 +95,12 @@ class ApontamentoOperacionalExpedicaoController extends Controller
 
         $campos = $this->camposEtapa($dados['etapa']);
         $atualizacao = [];
+        $oldValues = $demanda->only([
+            'conferencia_iniciada_em',
+            'conferencia_finalizada_em',
+            'carregamento_iniciado_em',
+            'carregamento_finalizado_em',
+        ]);
 
         if ($dados['acao'] === 'iniciar_agora') {
             $atualizacao[$campos['inicio']] = now();
@@ -125,6 +132,16 @@ class ApontamentoOperacionalExpedicaoController extends Controller
         }
 
         $demanda->update($atualizacao);
+
+        SystemLogService::record([
+            'module' => 'expedicao',
+            'action' => 'apontamento_operacional_salvo',
+            'description' => "Apontamento operacional de {$dados['etapa']} salvo para a FO {$fo}.",
+            'entity_type' => 'demanda',
+            'entity_id' => $demanda->id,
+            'old_values' => $oldValues,
+            'new_values' => array_merge(['fo' => $fo, 'etapa' => $dados['etapa'], 'acao' => $dados['acao']], $atualizacao),
+        ]);
 
         return back()->with('success', 'Apontamento operacional salvo com sucesso.');
     }

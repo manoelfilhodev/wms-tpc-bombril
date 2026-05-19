@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use App\Services\SystemLogService;
 
 
 class ExecutarSeparacaoController extends Controller
@@ -179,6 +180,33 @@ class ExecutarSeparacaoController extends Controller
             'ip_address' => request()->ip(),
             'navegador' => request()->header('User-Agent'),
             'created_at' => now()
+        ]);
+
+        SystemLogService::record([
+            'module' => 'separacao',
+            'action' => 'lancamento_item_realizado',
+            'description' => "Usuário realizou lançamento de separação do SKU {$item->sku}.",
+            'entity_type' => 'separacao_item',
+            'entity_id' => $id,
+            'old_values' => [
+                'pedido_id' => $item->pedido_id,
+                'sku' => $item->sku,
+                'quantidade' => $item->quantidade,
+                'conferido' => $item->conferido,
+                'status' => $item->status,
+            ],
+            'new_values' => [
+                'pedido_id' => $item->pedido_id,
+                'fo' => $item->fo,
+                'sku' => $item->sku,
+                'sku_id' => $sku_id,
+                'quantidade_solicitada' => $item->quantidade,
+                'quantidade_separada' => (int) $request->quantidade_separada,
+                'posicao_id' => $posicao->posicao_id,
+                'posicao' => $posicao->codigo_posicao ?? 'DESCONHECIDO',
+                'observacoes' => $request->observacoes,
+                'status' => 'FINALIZADA',
+            ],
         ]);
 
 

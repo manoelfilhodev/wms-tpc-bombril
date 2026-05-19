@@ -77,6 +77,13 @@
                             <span> Dispositivos </span>
                         </a>
                     </li>
+                    <li class="side-nav-item">
+                        <a href="{{ route('admin.logs.index') }}"
+                            class="side-nav-link {{ request()->routeIs('admin.logs.*') ? 'active' : '' }}">
+                            <i class="mdi mdi-shield-search"></i>
+                            <span> Auditoria </span>
+                        </a>
+                    </li>
                 @endif
             </ul>
         </div>

@@ -90,6 +90,57 @@ class DemandaRedistribuicaoTest extends TestCase
         ]);
     }
 
+    public function test_fluxo_de_distribuicao_da_tela_operacional_gera_logs_de_auditoria(): void
+    {
+        $this->actingAs($this->createUser())
+            ->withSession(['tipo' => 'admin', 'nivel' => 'Admin']);
+
+        $demanda = $this->createDemandaComPicking(500, 5);
+
+        $this->post(route('demandas.distribuir', $demanda->id), [
+            'distribuicoes' => [
+                [
+                    'separador_nome' => 'Joao Auditoria',
+                    'quantidade_pecas' => 500,
+                    'quantidade_skus' => 5,
+                ],
+            ],
+        ])->assertSessionHas('success');
+
+        $distribuicao = DemandaDistribuicao::where('demanda_id', $demanda->id)->firstOrFail();
+
+        $this->patch(route('demandas.redistribuirDistribuicao', [$demanda->id, $distribuicao->id]), [
+            'quantidade_pecas' => 400,
+            'quantidade_skus' => 4,
+        ])->assertSessionHas('success');
+
+        $this->post(route('demandas.finalizarSeparador', $demanda->id), [
+            'separador_nome' => 'Joao Auditoria',
+            'resultado' => 'PARCIAL',
+        ])->assertSessionHas('success');
+
+        $this->assertDatabaseHas('_tb_system_logs', [
+            'module' => 'separacao',
+            'action' => 'distribuicao_dt_realizada',
+            'entity_type' => 'demanda',
+            'entity_id' => (string) $demanda->id,
+        ]);
+
+        $this->assertDatabaseHas('_tb_system_logs', [
+            'module' => 'separacao',
+            'action' => 'distribuicao_redistribuida',
+            'entity_type' => 'demanda_distribuicao',
+            'entity_id' => (string) $distribuicao->id,
+        ]);
+
+        $this->assertDatabaseHas('_tb_system_logs', [
+            'module' => 'separacao',
+            'action' => 'separador_finalizado',
+            'entity_type' => 'demanda_distribuicao',
+            'entity_id' => (string) $distribuicao->id,
+        ]);
+    }
+
     public function test_distribuicao_finalizada_nao_pode_ser_redistribuida(): void
     {
         $this->actingAs($this->createUser())
