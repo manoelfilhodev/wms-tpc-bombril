@@ -22,6 +22,7 @@ Route::prefix('demandas')->middleware(['auth'])->group(function () {
     Route::get('/relatorios/gerencial', [DemandaController::class, 'reportGerencial'])->middleware('demanda.perfil:operacional')->name('demandas.reportGerencial');
     Route::get('/relatorios/turno', [DemandaController::class, 'reportTurno'])->middleware('demanda.perfil:operacional')->name('demandas.reportTurno');
     Route::get('/identificacao-a4', [DemandaController::class, 'identificacaoA4'])->middleware('demanda.perfil:operacional')->name('demandas.identificacaoA4');
+    Route::post('/identificacao-a4/auditar-impressao', [DemandaController::class, 'auditarImpressaoIdentificacaoA4'])->middleware('demanda.perfil:operacional')->name('demandas.identificacaoA4.auditPrint');
     Route::get('/create', [DemandaController::class, 'create'])->middleware('demanda.perfil:sala')->name('demandas.create');
     Route::post('/store', [DemandaController::class, 'store'])->middleware('demanda.perfil:sala')->name('demandas.store.manual');
     Route::post('/{id}/iniciar-separacao', [DemandaController::class, 'iniciarSeparacao'])->middleware('demanda.perfil:operacional')->name('demandas.iniciarSeparacao');

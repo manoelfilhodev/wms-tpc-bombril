@@ -1756,9 +1756,47 @@ class DemandaController extends Controller
             }
         }
 
+        $temDados = $dados['tipo'] === 'box'
+            ? $dados['box'] !== ''
+            : ($dados['dt'] !== '' || $dados['pallets'] !== '' || $dados['conferente'] !== '');
+
+        if ($temDados) {
+            SystemLogService::record([
+                'module' => 'separacao',
+                'action' => 'identificacao_a4_gerada',
+                'description' => 'Identificação A4 gerada para impressão.',
+                'entity_type' => $dados['tipo'] === 'box' ? 'box' : 'demanda',
+                'entity_id' => $dados['tipo'] === 'box' ? $dados['box'] : $dados['dt'],
+                'new_values' => $dados,
+            ]);
+        }
+
         return view('demandas.identificacao_a4', [
             'dados' => $dados,
         ]);
+    }
+
+    public function auditarImpressaoIdentificacaoA4(Request $request)
+    {
+        $dados = $request->validate([
+            'tipo' => 'required|in:dt,box',
+            'dt' => 'nullable|string|max:100',
+            'box' => 'nullable|string|max:100',
+            'pallets' => 'nullable|string|max:100',
+            'data' => 'nullable|date',
+            'conferente' => 'nullable|string|max:150',
+        ]);
+
+        SystemLogService::record([
+            'module' => 'separacao',
+            'action' => 'identificacao_a4_impressa',
+            'description' => 'Usuário acionou a impressão da identificação A4.',
+            'entity_type' => $dados['tipo'] === 'box' ? 'box' : 'demanda',
+            'entity_id' => $dados['tipo'] === 'box' ? ($dados['box'] ?? null) : ($dados['dt'] ?? null),
+            'new_values' => $dados,
+        ]);
+
+        return response()->noContent();
     }
 
     private function aplicarFiltrosOperacionais($query, ?string $turno, ?string $data)

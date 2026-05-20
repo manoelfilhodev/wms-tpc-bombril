@@ -24,7 +24,7 @@
         </div>
         <div class="d-flex gap-2">
             <a href="{{ route('demandas.operacional') }}" class="btn btn-outline-secondary btn-sm">Voltar operacional</a>
-            <button type="button" class="btn btn-primary btn-sm" onclick="window.print()" @disabled(!$temDados)>
+            <button type="button" class="btn btn-primary btn-sm" onclick="auditIdentificacaoPrint()" @disabled(!$temDados)>
                 <i class="mdi mdi-printer me-1"></i> Imprimir
             </button>
         </div>
@@ -328,4 +328,31 @@
         }
     }
 </style>
+
+<script>
+    function auditIdentificacaoPrint() {
+        const payload = @json($dados);
+        const formData = new FormData();
+
+        Object.entries(payload).forEach(([key, value]) => {
+            formData.append(key, value ?? '');
+        });
+        formData.append('_token', '{{ csrf_token() }}');
+
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon('{{ route('demandas.identificacaoA4.auditPrint') }}', formData);
+            window.print();
+            return;
+        }
+
+        fetch('{{ route('demandas.identificacaoA4.auditPrint') }}', {
+            method: 'POST',
+            body: formData,
+            keepalive: true,
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            }
+        }).finally(() => window.print());
+    }
+</script>
 @endsection

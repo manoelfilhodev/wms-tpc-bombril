@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\SystemLogService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -65,7 +67,7 @@ class UserController extends Controller
                 ->withInput();
         }
 
-        DB::table('_tb_usuarios')->insert([
+        $usuarioId = DB::table('_tb_usuarios')->insertGetId([
             'nome' => $validated['nome'],
             'email' => mb_strtolower($validated['login']),
             'password' => Hash::make($validated['senha']),
@@ -75,6 +77,24 @@ class UserController extends Controller
             'nivel' => $validated['desc_nivel'],
             'created_at' => now(),
             'updated_at' => now(),
+        ]);
+
+        SystemLogService::record([
+            ...$this->systemLogActor(),
+            'module' => 'administracao',
+            'action' => 'usuario_criado',
+            'description' => "Usuário {$validated['nome']} criado.",
+            'entity_type' => 'usuario',
+            'entity_id' => $usuarioId,
+            'new_values' => [
+                'nome' => $validated['nome'],
+                'email' => mb_strtolower($validated['login']),
+                'unidade_id' => $unidadeId,
+                'status' => $validated['status'] === '1' ? 'ativo' : 'inativo',
+                'tipo' => $this->mapTipoFromNivel((int) $validated['cod_nivel']),
+                'nivel' => $validated['desc_nivel'],
+                'senha_definida' => true,
+            ],
         ]);
 
         return redirect()->route('usuarios.index')->with('success', 'Usuario cadastrado com sucesso!');
@@ -131,12 +151,59 @@ class UserController extends Controller
 
         DB::table('_tb_usuarios')->where('id_user', $id)->update($payload);
 
+        SystemLogService::record([
+            ...$this->systemLogActor(),
+            'module' => 'administracao',
+            'action' => 'usuario_atualizado',
+            'description' => "Usuário {$payload['nome']} atualizado.",
+            'entity_type' => 'usuario',
+            'entity_id' => $id,
+            'old_values' => (array) $usuario,
+            'new_values' => array_merge($payload, [
+                'password' => null,
+                'senha_alterada' => ! empty($validated['password']),
+            ]),
+        ]);
+
+        if (($usuario->tipo ?? null) !== $payload['tipo'] || ($usuario->status ?? null) !== $payload['status']) {
+            SystemLogService::record([
+                ...$this->systemLogActor(),
+                'module' => 'administracao',
+                'action' => 'usuario_permissao_alterada',
+                'description' => "Perfil/status do usuário {$payload['nome']} alterado.",
+                'entity_type' => 'usuario',
+                'entity_id' => $id,
+                'old_values' => [
+                    'tipo' => $usuario->tipo ?? null,
+                    'nivel' => $usuario->nivel ?? null,
+                    'status' => $usuario->status ?? null,
+                ],
+                'new_values' => [
+                    'tipo' => $payload['tipo'],
+                    'nivel' => $usuario->nivel ?? null,
+                    'status' => $payload['status'],
+                ],
+            ]);
+        }
+
         return redirect()->route('usuarios.index')->with('success', 'Usuario atualizado com sucesso!');
     }
 
     public function destroy(int $id)
     {
+        $usuario = DB::table('_tb_usuarios')->where('id_user', $id)->first();
+
         DB::table('_tb_usuarios')->where('id_user', $id)->delete();
+
+        SystemLogService::record([
+            ...$this->systemLogActor(),
+            'module' => 'administracao',
+            'action' => 'usuario_excluido',
+            'description' => 'Usuário excluído.',
+            'entity_type' => 'usuario',
+            'entity_id' => $id,
+            'old_values' => $usuario ? (array) $usuario : null,
+        ]);
 
         return redirect()->route('usuarios.index')->with('success', 'Usuario excluido com sucesso!');
     }
@@ -164,6 +231,21 @@ class UserController extends Controller
             2, 3, 4 => 'gestor',
             default => 'operador',
         };
+    }
+
+    private function systemLogActor(): array
+    {
+        $user = Auth::user();
+
+        return [
+            'user_id' => $user?->id_user ?? session('user_id'),
+            'user_name' => $user?->nome ?? session('nome'),
+            'user_email' => $user?->email,
+            'user_role' => trim(implode(' / ', array_filter([
+                $user?->tipo ?? session('tipo'),
+                $user?->nivel ?? session('nivel'),
+            ]))) ?: null,
+        ];
     }
 
     public function buscarSeparadores(Request $request)

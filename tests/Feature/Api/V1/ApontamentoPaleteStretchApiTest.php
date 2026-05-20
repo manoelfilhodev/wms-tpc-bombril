@@ -45,6 +45,17 @@ class ApontamentoPaleteStretchApiTest extends TestCase
             'origem' => 'APP',
             'status' => 'APONTADO',
         ]);
+
+        $apontamentoId = DB::table('_tb_apontamentos_paletes_stretch')
+            ->where('client_uuid', $uuid)
+            ->value('id');
+
+        $this->assertDatabaseHas('_tb_system_logs', [
+            'module' => 'stretch',
+            'action' => 'palete_stretch_apontado_api',
+            'entity_type' => 'apontamento_palete_stretch',
+            'entity_id' => (string) $apontamentoId,
+        ]);
     }
 
     public function test_store_is_idempotent_by_client_uuid(): void

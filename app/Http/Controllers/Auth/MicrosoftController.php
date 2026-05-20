@@ -244,6 +244,10 @@ class MicrosoftController extends Controller
             ], $request);
 
             SystemLogService::record([
+                'user_id' => $user->id_user,
+                'user_name' => $user->nome,
+                'user_email' => $user->email,
+                'user_role' => $this->systemLogUserRole($user),
                 'module' => 'login',
                 'action' => 'login_microsoft_realizado',
                 'description' => 'Usuário realizou login via Microsoft/Azure.',
@@ -308,5 +312,13 @@ class MicrosoftController extends Controller
             'navegador' => $request->userAgent(),
             'created_at' => now(),
         ]);
+    }
+
+    private function systemLogUserRole(User $user): ?string
+    {
+        return trim(implode(' / ', array_filter([
+            $user->tipo ?? null,
+            $user->nivel ?? null,
+        ]))) ?: null;
     }
 }

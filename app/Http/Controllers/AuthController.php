@@ -59,19 +59,6 @@ class AuthController extends Controller
         if (! Auth::attempt($credentials)) {
             $usuario = User::where('email', $credentials['email'])->first();
 
-            SystemLogService::record([
-                'user_id' => $usuario?->id_user,
-                'user_name' => $usuario?->nome,
-                'user_email' => $credentials['email'],
-                'user_role' => $usuario ? trim(($usuario->tipo ?? '') . ' / ' . ($usuario->nivel ?? '')) : null,
-                'module' => 'login',
-                'action' => 'login_invalido',
-                'description' => 'Tentativa de login inválida.',
-                'entity_type' => 'usuario',
-                'entity_id' => $usuario?->id_user,
-                'new_values' => ['email' => $credentials['email']],
-            ]);
-
             if ($usuario && $usuario->id_user && $usuario->unidade_id) {
                 $this->insertUserLog(
                     (int) $usuario->id_user,
@@ -108,6 +95,10 @@ class AuthController extends Controller
         }
 
         SystemLogService::record([
+            'user_id' => $usuario->id_user,
+            'user_name' => $usuario->nome,
+            'user_email' => $usuario->email,
+            'user_role' => $this->systemLogUserRole($usuario),
             'module' => 'login',
             'action' => 'login_realizado',
             'description' => 'Usuário realizou login no sistema.',
@@ -154,6 +145,10 @@ class AuthController extends Controller
         }
 
         SystemLogService::record([
+            'user_id' => $user->id_user,
+            'user_name' => $user->nome,
+            'user_email' => $user->email,
+            'user_role' => $this->systemLogUserRole($user),
             'module' => 'login',
             'action' => 'logout',
             'description' => 'Usuário encerrou a sessão manualmente.',
@@ -223,6 +218,20 @@ public function apiLogin(Request $request)
         $request
     );
 
+    SystemLogService::record([
+        'user_id' => $user->id_user,
+        'user_name' => $user->nome,
+        'user_email' => $user->email,
+        'user_role' => $this->systemLogUserRole($user),
+        'module' => 'login',
+        'action' => 'login_api_realizado',
+        'description' => 'Usuário realizou login via API/app.',
+        'entity_type' => 'usuario',
+        'entity_id' => $user->id_user,
+        'device_id' => $deviceId ?: null,
+        'new_values' => ['email' => $user->email, 'device_id' => $deviceId ?: null],
+    ]);
+
     // 🚀 RESPOSTA FINAL
     return response()->json([
         'token' => $token,
@@ -257,5 +266,13 @@ public function apiLogin(Request $request)
 
         return 'https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri='
             . urlencode($postLogoutRedirectUri);
+    }
+
+    private function systemLogUserRole(User $user): ?string
+    {
+        return trim(implode(' / ', array_filter([
+            $user->tipo ?? null,
+            $user->nivel ?? null,
+        ]))) ?: null;
     }
 }

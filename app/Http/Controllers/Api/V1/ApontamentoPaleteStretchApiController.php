@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreApontamentoPaleteStretchApiRequest;
 use App\Models\ApontamentoPaleteStretch;
+use App\Services\SystemLogService;
 use Illuminate\Http\JsonResponse;
 
 class ApontamentoPaleteStretchApiController extends Controller
@@ -71,6 +72,25 @@ class ApontamentoPaleteStretchApiController extends Controller
             'apontado_em_servidor' => now(),
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
+        ]);
+
+        SystemLogService::record([
+            'module' => 'stretch',
+            'action' => 'palete_stretch_apontado_api',
+            'description' => "Palete {$apontamento->palete_codigo} apontado com stretch via API.",
+            'entity_type' => 'apontamento_palete_stretch',
+            'entity_id' => $apontamento->id,
+            'new_values' => $apontamento->only([
+                'palete_codigo',
+                'usuario_id',
+                'unidade_id',
+                'status',
+                'origem',
+                'observacao',
+                'client_uuid',
+                'device_id',
+                'app_version',
+            ]),
         ]);
 
         return response()->json([

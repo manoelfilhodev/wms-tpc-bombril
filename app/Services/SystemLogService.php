@@ -41,12 +41,13 @@ class SystemLogService
 
             $request = request();
             $user = Auth::user();
+            $actor = $this->actorContext($user);
 
             return SystemLog::create([
-                'user_id' => $data['user_id'] ?? $user?->getAuthIdentifier(),
-                'user_name' => $data['user_name'] ?? $user?->nome ?? $user?->name,
-                'user_email' => $data['user_email'] ?? $user?->email,
-                'user_role' => $data['user_role'] ?? $this->resolveUserRole($user),
+                'user_id' => $data['user_id'] ?? $actor['user_id'],
+                'user_name' => $data['user_name'] ?? $actor['user_name'],
+                'user_email' => $data['user_email'] ?? $actor['user_email'],
+                'user_role' => $data['user_role'] ?? $actor['user_role'],
                 'module' => $data['module'] ?? 'sistema',
                 'action' => $data['action'] ?? 'acao_nao_informada',
                 'description' => $data['description'] ?? 'Ação registrada pelo sistema.',
@@ -81,6 +82,16 @@ class SystemLogService
             $user->tipo ?? null,
             $user->nivel ?? null,
         ]))) ?: null;
+    }
+
+    private function actorContext(mixed $user): array
+    {
+        return [
+            'user_id' => $user?->getAuthIdentifier() ?? session('user_id'),
+            'user_name' => $user?->nome ?? $user?->name ?? session('nome'),
+            'user_email' => $user?->email,
+            'user_role' => $this->resolveUserRole($user),
+        ];
     }
 
     private function sanitize(mixed $value): mixed

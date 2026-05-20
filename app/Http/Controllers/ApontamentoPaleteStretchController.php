@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreApontamentoPaleteStretchRequest;
 use App\Models\ApontamentoPaleteStretch;
+use App\Services\SystemLogService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Schema;
@@ -44,7 +45,7 @@ class ApontamentoPaleteStretchController extends Controller
 
         $user = $request->user();
 
-        ApontamentoPaleteStretch::create([
+        $apontamento = ApontamentoPaleteStretch::create([
             'palete_codigo' => $request->validated('palete_codigo'),
             'usuario_id' => $user?->id_user,
             'unidade_id' => $user?->unidade_id,
@@ -55,6 +56,23 @@ class ApontamentoPaleteStretchController extends Controller
             'apontado_em_servidor' => now(),
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
+        ]);
+
+        SystemLogService::record([
+            'module' => 'stretch',
+            'action' => 'palete_stretch_apontado',
+            'description' => "Palete {$apontamento->palete_codigo} apontado com stretch.",
+            'entity_type' => 'apontamento_palete_stretch',
+            'entity_id' => $apontamento->id,
+            'new_values' => $apontamento->only([
+                'palete_codigo',
+                'usuario_id',
+                'unidade_id',
+                'status',
+                'origem',
+                'observacao',
+                'client_uuid',
+            ]),
         ]);
 
         return redirect()
