@@ -176,7 +176,7 @@
                         <h1 class="operator-title">Painel do Operador</h1>
                         <p class="operator-subtitle">
                             Acesso rapido as rotinas liberadas para operacao: separacao,
-                            painel de acompanhamento, stretch, identificacao e report.
+                            expedicao, painel de acompanhamento, stretch, identificacao e report.
                         </p>
                     </div>
                     <div class="col-lg-4 text-lg-end">
@@ -227,6 +227,24 @@
                     </div>
 
                     <div class="col-12 col-lg-4">
+                        <a href="{{ route('expedicao.apontamentos-operacionais.index') }}" class="operator-card">
+                            <span class="operator-card-inner">
+                                <span>
+                                    <span class="operator-icon">
+                                        <i class="mdi mdi-truck-fast-outline"></i>
+                                    </span>
+                                    <h3>Expedicao</h3>
+                                    <p>Apontar conferencia e carregamento das FOs em operacao.</p>
+                                </span>
+                                <span class="operator-card-action">
+                                    Acessar expedicao
+                                    <i class="mdi mdi-arrow-right"></i>
+                                </span>
+                            </span>
+                        </a>
+                    </div>
+
+                    <div class="col-12 col-lg-4">
                         <a href="{{ route('stretch.apontar') }}" class="operator-card">
                             <span class="operator-card-inner">
                                 <span>
@@ -256,6 +274,24 @@
                                 </span>
                                 <span class="operator-card-action">
                                     Abrir identificacao
+                                    <i class="mdi mdi-arrow-right"></i>
+                                </span>
+                            </span>
+                        </a>
+                    </div>
+
+                    <div class="col-12 col-lg-4">
+                        <a href="{{ route('demandas.import.view') }}" class="operator-card">
+                            <span class="operator-card-inner">
+                                <span>
+                                    <span class="operator-icon">
+                                        <i class="mdi mdi-file-excel"></i>
+                                    </span>
+                                    <h3>Importar DTs</h3>
+                                    <p>Colar a exportacao SAP para atualizar as DTs operacionais.</p>
+                                </span>
+                                <span class="operator-card-action">
+                                    Importar planilha
                                     <i class="mdi mdi-arrow-right"></i>
                                 </span>
                             </span>

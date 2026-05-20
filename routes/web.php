@@ -64,10 +64,10 @@ Route::middleware(['auth'])->prefix('expedicao')->name('expedicao.')->group(func
     Route::post('/importacao-programacao', [ImportacaoProgramacaoExpedicaoController::class, 'store'])
         ->name('importacao-programacao.store');
     Route::get('/apontamentos-operacionais', [ApontamentoOperacionalExpedicaoController::class, 'index'])
-        ->middleware('admin')
+        ->middleware('demanda.perfil:operacional')
         ->name('apontamentos-operacionais.index');
     Route::post('/programacoes/{fo}/apontamento-operacional', [ApontamentoOperacionalExpedicaoController::class, 'store'])
-        ->middleware('admin')
+        ->middleware('demanda.perfil:operacional')
         ->name('programacoes.apontamento-operacional.store');
 });
 

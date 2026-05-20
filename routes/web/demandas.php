@@ -4,12 +4,12 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DemandaController;
 
 Route::post('/demandas/import', [DemandaController::class, 'import'])
-    ->middleware(['auth', 'demanda.perfil:sala'])
+    ->middleware(['auth', 'demanda.perfil:operacional'])
     ->name('demandas.import');
 
 Route::get('/demandas/import', function () {
     return view('demandas.import');
-})->middleware(['auth', 'demanda.perfil:sala'])->name('demandas.import.view');
+})->middleware(['auth', 'demanda.perfil:operacional'])->name('demandas.import.view');
 
 
 

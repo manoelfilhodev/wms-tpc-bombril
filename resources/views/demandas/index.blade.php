@@ -41,12 +41,13 @@
                     data-bs-toggle="tooltip" title="Imprimir identificação A4">
                     <i class="mdi mdi-printer-outline"></i> Identificação
                 </a>
+                @if (!empty($modoOperacional) || !$isOperator)
+                <a href="{{ route('demandas.import.view') }}" class="btn btn-outline-secondary btn-sm"
+                    data-bs-toggle="tooltip" title="Importar via Excel">
+                    <i class="mdi mdi-file-excel"></i>
+                </a>
+                @endif
                 @if (!$isOperator)
-                    
-                    <a href="{{ route('demandas.import.view') }}" class="btn btn-outline-secondary btn-sm"
-                        data-bs-toggle="tooltip" title="Importar via Excel">
-                        <i class="mdi mdi-file-excel"></i>
-                    </a>
                     <a href="{{ route('demandas.export', request()->query()) }}" class="btn btn-outline-secondary btn-sm"
                         data-bs-toggle="tooltip" title="Exportar">
                         <i class="mdi mdi-download"></i>

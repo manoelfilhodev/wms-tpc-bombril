@@ -1,6 +1,9 @@
 @extends('layouts.app')
 
 @section('content')
+@php
+    $isOperator = Auth::user()?->tipo === 'operador';
+@endphp
 <div class="container-fluid px-4 py-3">
     @include('partials.breadcrumb-auto')
 
@@ -16,7 +19,7 @@
             </div>
         </div>
         <div class="d-flex gap-2">
-            <a href="{{ route('demandas.index') }}" class="btn btn-outline-secondary btn-sm" data-bs-toggle="tooltip" title="Voltar para a lista">
+            <a href="{{ $isOperator ? route('demandas.operacional') : route('demandas.index') }}" class="btn btn-outline-secondary btn-sm" data-bs-toggle="tooltip" title="Voltar para a lista">
                 <i class="mdi mdi-arrow-left"></i> Voltar
             </a>
         </div>
