@@ -47,12 +47,20 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Demanda</label>
+                    <select name="tipo_demanda" class="form-select form-select-sm">
+                        <option value="TODAS" @selected(($tipoDemanda ?? 'TODAS') === 'TODAS')>Todas</option>
+                        <option value="PROGRAMADA" @selected(($tipoDemanda ?? 'TODAS') === 'PROGRAMADA')>Programada</option>
+                        <option value="OPORTUNIDADE" @selected(($tipoDemanda ?? 'TODAS') === 'OPORTUNIDADE')>Oportunidade</option>
+                    </select>
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
                     <button type="submit" class="btn btn-sm btn-primary w-100">
                         <i class="mdi mdi-refresh me-1"></i> Gerar
                     </button>
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
+                <div class="col-md-1 d-flex align-items-end">
                     <a href="{{ route('demandas.reportTurno') }}" class="btn btn-sm btn-outline-secondary w-100">Hoje</a>
                 </div>
             </form>
@@ -92,6 +100,49 @@
                     <span>Separado</span>
                     <strong>{{ number_format($resumoStatus['separado'], 0, ',', '.') }}</strong>
                     <small>Backlog finalizado: {{ number_format($resumoStatus['backlog_separado'], 0, ',', '.') }}</small>
+                </div>
+            </div>
+
+            <div class="demand-shift-summary">
+                <div class="demand-shift-card demand-programmed">
+                    <div class="demand-title">Programadas</div>
+                    <div class="demand-grid">
+                        <div><span>Recebidas</span><strong>{{ number_format($visaoTurnoDemanda['programadas']['recebidas'] ?? 0, 0, ',', '.') }}</strong></div>
+                        <div><span>Executadas</span><strong>{{ number_format($visaoTurnoDemanda['programadas']['executadas'] ?? 0, 0, ',', '.') }}</strong></div>
+                        <div><span>Pendentes</span><strong>{{ number_format($visaoTurnoDemanda['programadas']['pendentes'] ?? 0, 0, ',', '.') }}</strong></div>
+                    </div>
+                </div>
+                <div class="demand-shift-card demand-opportunity">
+                    <div class="demand-title">Oportunidades</div>
+                    <div class="demand-grid">
+                        <div><span>Recebidas</span><strong>{{ number_format($visaoTurnoDemanda['oportunidades']['recebidas'] ?? 0, 0, ',', '.') }}</strong></div>
+                        <div><span>Executadas</span><strong>{{ number_format($visaoTurnoDemanda['oportunidades']['executadas'] ?? 0, 0, ',', '.') }}</strong></div>
+                        <div><span>Pendentes</span><strong>{{ number_format($visaoTurnoDemanda['oportunidades']['pendentes'] ?? 0, 0, ',', '.') }}</strong></div>
+                    </div>
+                </div>
+                <div class="demand-shift-card demand-handoff">
+                    <div class="demand-title">Passagem de Turno</div>
+                    <div class="handoff-value">{{ number_format($visaoTurnoDemanda['passagem_turno'] ?? 0, 0, ',', '.') }}</div>
+                    <div class="handoff-label">pendências repassadas ao próximo turno</div>
+                </div>
+            </div>
+
+            <div class="capacity-shift-summary">
+                <div>
+                    <span>Consumo carteira</span>
+                    <strong>{{ number_format($capacidadeOperacional['capacidade']['carteira_consumida_dt'] ?? 0, 0, ',', '.') }}</strong>
+                </div>
+                <div>
+                    <span>Consumo paralelo</span>
+                    <strong>{{ number_format($capacidadeOperacional['capacidade']['paralela_consumida_dt'] ?? 0, 0, ',', '.') }}</strong>
+                </div>
+                <div>
+                    <span>Restante estimado</span>
+                    <strong>{{ number_format($capacidadeOperacional['capacidade']['restante_dt'] ?? 0, 0, ',', '.') }}</strong>
+                </div>
+                <div>
+                    <span>Risco</span>
+                    <strong>{{ $capacidadeOperacional['risco']['label'] ?? '-' }}</strong>
                 </div>
             </div>
 
@@ -268,6 +319,110 @@
         line-height: 1;
         margin-top: 6px;
         font-weight: 800;
+    }
+
+    .demand-shift-summary {
+        display: grid;
+        grid-template-columns: 1fr 1fr .82fr;
+        gap: 1px;
+        background: #cbd5e1;
+        border-bottom: 1px solid #cbd5e1;
+    }
+
+    .demand-shift-card {
+        background: #f8fafc;
+        padding: 10px 12px;
+    }
+
+    .demand-title {
+        color: #111827;
+        font-size: 13px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 8px;
+    }
+
+    .demand-programmed .demand-title {
+        color: #1d4ed8;
+    }
+
+    .demand-opportunity .demand-title {
+        color: #6d28d9;
+    }
+
+    .demand-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+
+    .demand-grid span,
+    .handoff-label {
+        display: block;
+        color: #64748b;
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1.1;
+        text-transform: uppercase;
+    }
+
+    .demand-grid strong,
+    .handoff-value {
+        display: block;
+        color: #111827;
+        font-size: 23px;
+        line-height: 1;
+        margin-top: 4px;
+        font-weight: 900;
+    }
+
+    .demand-handoff {
+        background: #111827;
+        color: #fff;
+    }
+
+    .demand-handoff .demand-title,
+    .demand-handoff .handoff-value {
+        color: #fff;
+    }
+
+    .demand-handoff .handoff-label {
+        color: #cbd5e1;
+        margin-top: 6px;
+    }
+
+    .capacity-shift-summary {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: #cbd5e1;
+        border-bottom: 1px solid #cbd5e1;
+    }
+
+    .capacity-shift-summary > div {
+        background: #ffffff;
+        padding: 10px 12px;
+        text-align: center;
+    }
+
+    .capacity-shift-summary span {
+        display: block;
+        color: #64748b;
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1.1;
+        text-transform: uppercase;
+    }
+
+    .capacity-shift-summary strong {
+        display: block;
+        color: #111827;
+        font-size: 18px;
+        line-height: 1.05;
+        margin-top: 5px;
+        font-weight: 900;
+        overflow-wrap: anywhere;
     }
 
     .report-table {

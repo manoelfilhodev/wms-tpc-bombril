@@ -15,9 +15,16 @@ use Throwable;
 class ImportacaoProgramacaoExpedicaoService
 {
     private const ABA_PROG = 'PROG';
+    private const DATA_OPERACIONAL_MINIMA = '2000-01-01 00:00:00';
 
-    public function importar(UploadedFile $arquivo): array
+    public function importar(
+        UploadedFile $arquivo,
+        string $tipoDemanda = ExpedicaoProgramacao::TIPO_PROGRAMADA,
+        ?string $origemDemanda = null
+    ): array
     {
+        $tipoDemanda = $this->normalizarTipoDemanda($tipoDemanda);
+        $origemDemanda = $this->normalizarOrigemDemanda($origemDemanda, $tipoDemanda);
         $extensao = strtolower((string) $arquivo->getClientOriginalExtension());
 
         if ($extensao === 'xlsb') {
@@ -30,7 +37,7 @@ class ImportacaoProgramacaoExpedicaoService
             ? $this->lerCsv($arquivo)
             : $this->lerPlanilha($arquivo);
 
-        return $this->processarLinhas($linhas);
+        return $this->processarLinhas($linhas, $tipoDemanda, $origemDemanda);
     }
 
     private function lerPlanilha(UploadedFile $arquivo): array
@@ -82,13 +89,14 @@ class ImportacaoProgramacaoExpedicaoService
         return (string) array_key_first($pontuacoes);
     }
 
-    private function processarLinhas(array $linhas): array
+    private function processarLinhas(array $linhas, string $tipoDemanda, string $origemDemanda): array
     {
         $resumo = [
             'total_lidas' => 0,
             'criadas' => 0,
             'atualizadas' => 0,
             'ignoradas' => 0,
+            'bloqueadas_programadas' => 0,
             'erros' => 0,
             'falhas' => [],
             'colunas_detectadas' => [],
@@ -118,7 +126,7 @@ class ImportacaoProgramacaoExpedicaoService
                     continue;
                 }
 
-                $resultado = $this->salvarLinha(trim((string) $fo), $dados);
+                $resultado = $this->salvarLinha(trim((string) $fo), $dados, $tipoDemanda, $origemDemanda);
                 $resumo[$resultado]++;
             } catch (Throwable $e) {
                 $resumo['erros']++;
@@ -166,10 +174,18 @@ class ImportacaoProgramacaoExpedicaoService
         return $dados;
     }
 
-    private function salvarLinha(string $fo, array $dados): string
+    private function salvarLinha(string $fo, array $dados, string $tipoDemanda, string $origemDemanda): string
     {
         $programacao = ExpedicaoProgramacao::firstOrNew(['fo' => $fo]);
         $criado = ! $programacao->exists;
+
+        if (
+            ! $criado
+            && $tipoDemanda === ExpedicaoProgramacao::TIPO_OPORTUNIDADE
+            && $programacao->tipo_demanda === ExpedicaoProgramacao::TIPO_PROGRAMADA
+        ) {
+            return 'bloqueadas_programadas';
+        }
 
         $camposProgramacao = [
             'dt_sap' => $fo,
@@ -183,8 +199,14 @@ class ImportacaoProgramacaoExpedicaoService
             'transportadora' => $this->valor($dados, ['transportadora']),
             'tipo_veiculo' => $this->valor($dados, ['tipo do veiculo', 'desc tp veiculo', 'tipo veiculo']),
             'tipo_carga' => $this->tipoCarga($dados),
+            'tipo_demanda' => $tipoDemanda,
+            'origem_demanda' => $origemDemanda,
             'observacoes' => $this->valor($dados, ['observacao', 'observações', 'observacoes']),
         ];
+
+        if (! $criado && $tipoDemanda === ExpedicaoProgramacao::TIPO_PROGRAMADA) {
+            unset($camposProgramacao['tipo_demanda'], $camposProgramacao['origem_demanda']);
+        }
 
         $this->preencherSemNulos($programacao, $camposProgramacao);
 
@@ -196,7 +218,6 @@ class ImportacaoProgramacaoExpedicaoService
         $programacao->save();
 
         $demandaAlterada = $this->atualizarDemanda($fo, $dados);
-        $this->recalcularPrevisao($programacao);
 
         if ($criado) {
             return 'criadas';
@@ -284,6 +305,28 @@ class ImportacaoProgramacaoExpedicaoService
         }
     }
 
+    private function normalizarTipoDemanda(string $tipoDemanda): string
+    {
+        $tipoDemanda = strtoupper(trim($tipoDemanda));
+
+        return in_array($tipoDemanda, ExpedicaoProgramacao::tiposDemanda(), true)
+            ? $tipoDemanda
+            : ExpedicaoProgramacao::TIPO_PROGRAMADA;
+    }
+
+    private function normalizarOrigemDemanda(?string $origemDemanda, string $tipoDemanda): string
+    {
+        $origemDemanda = strtoupper(trim((string) $origemDemanda));
+
+        if (in_array($origemDemanda, ExpedicaoProgramacao::origensDemanda(), true)) {
+            return $origemDemanda;
+        }
+
+        return $tipoDemanda === ExpedicaoProgramacao::TIPO_OPORTUNIDADE
+            ? ExpedicaoProgramacao::ORIGEM_IMPORTACAO_OPORTUNIDADE
+            : ExpedicaoProgramacao::ORIGEM_PLANILHA_MANHA;
+    }
+
     private function valor(array $dados, array $aliases): mixed
     {
         foreach ($aliases as $alias) {
@@ -336,7 +379,7 @@ class ImportacaoProgramacaoExpedicaoService
                 return $this->combinarDataHora($dataPadrao, $valor);
             }
 
-            return Carbon::instance($dateTime);
+            return $this->dataOperacionalValida(Carbon::instance($dateTime));
         }
 
         $texto = trim((string) $valor);
@@ -344,7 +387,7 @@ class ImportacaoProgramacaoExpedicaoService
         $dataPlanilha = $this->dataPlanilhaAmericana($texto);
 
         if ($dataPlanilha) {
-            return $dataPlanilha;
+            return $this->dataOperacionalValida($dataPlanilha);
         }
 
         if (preg_match('/^\d{1,2}:\d{2}/', $texto) && ! $this->vazio($dataPadrao)) {
@@ -352,7 +395,7 @@ class ImportacaoProgramacaoExpedicaoService
         }
 
         try {
-            return Carbon::parse(str_replace('/', '-', $texto));
+            return $this->dataOperacionalValida(Carbon::parse(str_replace('/', '-', $texto)));
         } catch (Throwable) {
             return null;
         }
@@ -377,7 +420,16 @@ class ImportacaoProgramacaoExpedicaoService
             $dataCarbon->setTime((int) $horas, (int) $minutos, (int) $segundos);
         }
 
-        return $dataCarbon;
+        return $this->dataOperacionalValida($dataCarbon);
+    }
+
+    private function dataOperacionalValida(?Carbon $data): ?Carbon
+    {
+        if (! $data || $data->lt(self::DATA_OPERACIONAL_MINIMA)) {
+            return null;
+        }
+
+        return $data;
     }
 
     private function dataPlanilhaAmericana(string $valor): ?Carbon

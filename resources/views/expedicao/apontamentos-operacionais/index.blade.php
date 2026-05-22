@@ -36,7 +36,60 @@
         }
 
         .exp-ops-page .form-select option {
-            color: #111827;
+            background: #111827;
+            color: #f8fafc;
+        }
+
+        .exp-ops-queue-summary {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(96px, 1fr));
+            gap: 10px;
+        }
+
+        .exp-ops-queue-card {
+            min-height: 74px;
+            padding: 12px;
+            border: 1px solid rgba(148, 163, 184, .18);
+            border-radius: 8px;
+            background: rgba(15, 23, 42, .72);
+        }
+
+        .exp-ops-queue-card.done {
+            border-color: rgba(34, 197, 94, .28);
+            background: linear-gradient(135deg, rgba(21, 128, 61, .18), rgba(15, 23, 42, .72));
+        }
+
+        .exp-ops-queue-card.active {
+            border-color: rgba(59, 130, 246, .34);
+            background: linear-gradient(135deg, rgba(37, 99, 235, .18), rgba(15, 23, 42, .72));
+        }
+
+        .exp-ops-queue-card.waiting {
+            border-color: rgba(245, 158, 11, .30);
+            background: linear-gradient(135deg, rgba(146, 64, 14, .16), rgba(15, 23, 42, .72));
+        }
+
+        .exp-ops-queue-label {
+            color: #a8b3c7;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: .04em;
+            line-height: 1.2;
+            text-transform: uppercase;
+        }
+
+        .exp-ops-queue-value {
+            margin-top: 6px;
+            color: #fff;
+            font-size: 23px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .exp-ops-queue-note {
+            margin-top: 5px;
+            color: #8fb5d7;
+            font-size: 11px;
         }
 
         .exp-ops-page input[type="datetime-local"]::-webkit-calendar-picker-indicator {
@@ -82,8 +135,24 @@
             background: #1f9d4c;
         }
 
+        .exp-ops-pill.working {
+            background: #2563eb;
+            color: #eff6ff;
+            box-shadow: 0 0 16px rgba(37, 99, 235, .22);
+        }
+
         .exp-ops-pill.warn {
             background: #d97706;
+        }
+
+        .exp-ops-pill.programmed {
+            background: #475569;
+            color: #dbeafe;
+        }
+
+        .exp-ops-pill.opportunity {
+            background: #6d28d9;
+            color: #f5f3ff;
         }
 
         .exp-ops-actions {
@@ -100,6 +169,24 @@
         .exp-ops-action-row .btn {
             white-space: nowrap;
             font-weight: 800;
+        }
+
+        .exp-ops-action-row .btn:disabled {
+            border-color: rgba(148, 163, 184, .24);
+            background: rgba(148, 163, 184, .08);
+            color: #94a3b8;
+            opacity: 1;
+        }
+
+        .exp-ops-edit-toggle {
+            font-weight: 800;
+        }
+
+        .exp-ops-edit-panel {
+            border: 1px solid rgba(245, 158, 11, .22);
+            border-radius: 8px;
+            background: rgba(245, 158, 11, .06);
+            padding: 10px;
         }
 
         .exp-ops-shortcuts {
@@ -126,6 +213,18 @@
         .icon-wrapper i {
             color: #fff !important;
         }
+
+        @media (max-width: 992px) {
+            .exp-ops-queue-summary {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 520px) {
+            .exp-ops-queue-summary {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 
     <div class="exp-ops-page container-fluid px-4 py-3">
@@ -149,6 +248,14 @@
 
                 <a href="{{ route('expedicao.previsibilidade.index') }}" class="btn btn-outline-secondary btn-sm">
                     <i class="mdi mdi-monitor-dashboard me-1"></i> Painel
+                </a>
+
+                <a href="{{ route('expedicao.saida-veiculos.index') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="mdi mdi-exit-run me-1"></i> Saída Veículo
+                </a>
+
+                <a href="{{ route('expedicao.timeline-dts.index') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="mdi mdi-timeline-clock-outline me-1"></i> Timeline DTs
                 </a>
 
                 <a href="{{ route('expedicao.importacao-programacao.index') }}" class="btn btn-outline-secondary btn-sm">
@@ -179,30 +286,75 @@
         @endif
 
         <div class="exp-ops-filter p-3 mb-3">
-            <form method="GET" class="row g-2 align-items-end">
-                <div class="col-md-5">
-                    <label for="busca" class="form-label exp-ops-muted">Buscar DT, destino ou cliente</label>
-                    <input type="text" name="busca" id="busca" class="form-control" value="{{ $busca }}" placeholder="Ex.: 251311087">
+            <div class="row g-3 align-items-end">
+                <div class="col-xl-6">
+                    <form method="GET" class="row g-2 align-items-end">
+                        <div class="col-md-5">
+                            <label for="busca" class="form-label exp-ops-muted">Buscar DT, destino ou cliente</label>
+                            <input type="text" name="busca" id="busca" class="form-control" value="{{ $busca }}" placeholder="Ex.: 251311087">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="status" class="form-label exp-ops-muted">Status</label>
+                            <select name="status" id="status" class="form-select">
+                                <option value="todos" @selected($status === 'todos')>Aguardando expedição</option>
+                                <option value="conferencia_pendente" @selected($status === 'conferencia_pendente')>Conferência pendente</option>
+                                <option value="carregamento_pendente" @selected($status === 'carregamento_pendente')>Carregamento pendente</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="tipo_demanda" class="form-label exp-ops-muted">Demanda</label>
+                            <select name="tipo_demanda" id="tipo_demanda" class="form-select">
+                                <option value="TODAS" @selected(($tipoDemanda ?? 'TODAS') === 'TODAS')>Todas</option>
+                                <option value="PROGRAMADA" @selected(($tipoDemanda ?? 'TODAS') === 'PROGRAMADA')>Programada</option>
+                                <option value="OPORTUNIDADE" @selected(($tipoDemanda ?? 'TODAS') === 'OPORTUNIDADE')>Oportunidade</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex gap-2">
+                            <button type="submit" class="btn btn-primary flex-fill">
+                                <i class="mdi mdi-filter-outline me-1"></i> Filtrar
+                            </button>
+                            <a href="{{ route('expedicao.apontamentos-operacionais.index') }}" class="btn btn-outline-light">
+                                <i class="mdi mdi-close"></i>
+                            </a>
+                        </div>
+                    </form>
                 </div>
-                <div class="col-md-4">
-                    <label for="status" class="form-label exp-ops-muted">Status</label>
-                    <select name="status" id="status" class="form-select">
-                        <option value="todos" @selected($status === 'todos')>Todos</option>
-                        <option value="conferencia_pendente" @selected($status === 'conferencia_pendente')>Conferência pendente</option>
-                        <option value="carregamento_pendente" @selected($status === 'carregamento_pendente')>Carregamento pendente</option>
-                        <option value="finalizadas" @selected($status === 'finalizadas')>Conferência e carregamento finalizados</option>
-                        <option value="sem_explosao" @selected($status === 'sem_explosao')>Sem explosão</option>
-                    </select>
+
+                <div class="col-xl-6">
+                    <div class="exp-ops-queue-summary">
+                        <div class="exp-ops-queue-card">
+                            <div class="exp-ops-queue-label">Na fila</div>
+                            <div class="exp-ops-queue-value">{{ $resumoFila['em_fila'] ?? 0 }}</div>
+                            <div class="exp-ops-queue-note">Separadas</div>
+                        </div>
+                        <div class="exp-ops-queue-card waiting">
+                            <div class="exp-ops-queue-label">Aguard. conf.</div>
+                            <div class="exp-ops-queue-value">{{ $resumoFila['aguardando_conferencia'] ?? 0 }}</div>
+                            <div class="exp-ops-queue-note">A apontar</div>
+                        </div>
+                        <div class="exp-ops-queue-card active">
+                            <div class="exp-ops-queue-label">Conferindo</div>
+                            <div class="exp-ops-queue-value">{{ $resumoFila['conferindo'] ?? 0 }}</div>
+                            <div class="exp-ops-queue-note">Em andamento</div>
+                        </div>
+                        <div class="exp-ops-queue-card waiting">
+                            <div class="exp-ops-queue-label">Aguard. carga</div>
+                            <div class="exp-ops-queue-value">{{ $resumoFila['aguardando_carregamento'] ?? 0 }}</div>
+                            <div class="exp-ops-queue-note">Conf. ok</div>
+                        </div>
+                        <div class="exp-ops-queue-card active">
+                            <div class="exp-ops-queue-label">Carregando</div>
+                            <div class="exp-ops-queue-value">{{ $resumoFila['carregando'] ?? 0 }}</div>
+                            <div class="exp-ops-queue-note">Em andamento</div>
+                        </div>
+                        <div class="exp-ops-queue-card done">
+                            <div class="exp-ops-queue-label">Finalizadas</div>
+                            <div class="exp-ops-queue-value">{{ $resumoFila['finalizadas'] ?? 0 }}</div>
+                            <div class="exp-ops-queue-note">Fora da fila</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-3 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary flex-fill">
-                        <i class="mdi mdi-filter-outline me-1"></i> Filtrar
-                    </button>
-                    <a href="{{ route('expedicao.apontamentos-operacionais.index') }}" class="btn btn-outline-light">
-                        <i class="mdi mdi-close"></i>
-                    </a>
-                </div>
-            </form>
+            </div>
         </div>
 
         <div class="exp-ops-table-wrap p-2">
@@ -228,6 +380,9 @@
                                 <td>
                                     <div class="exp-ops-dt">{{ $programacao->fo }}</div>
                                     <div class="exp-ops-muted small">{{ $programacao->tipo_carga ?? '-' }}</div>
+                                    <span class="exp-ops-pill {{ $programacao->tipo_demanda === 'OPORTUNIDADE' ? 'opportunity' : 'programmed' }} mt-1">
+                                        {{ $programacao->tipo_demanda_label }}
+                                    </span>
                                     @if (! $demanda)
                                         <span class="exp-ops-pill warn mt-1">Sem explosão</span>
                                     @endif
@@ -266,7 +421,7 @@
                         @empty
                             <tr>
                                 <td colspan="5" class="text-center exp-ops-muted py-4">
-                                    Nenhuma programação encontrada.
+                                    Nenhuma DT separada aguardando expedição.
                                 </td>
                             </tr>
                         @endforelse

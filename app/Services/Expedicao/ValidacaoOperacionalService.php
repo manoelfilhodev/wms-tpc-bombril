@@ -6,6 +6,8 @@ use Carbon\Carbon;
 
 class ValidacaoOperacionalService
 {
+    private const DATA_OPERACIONAL_MINIMA = '2000-01-01 00:00:00';
+
     public function validarEtapa(?string $inicio, ?string $fim, int $limiteMinutos): array
     {
         if (!$inicio || !$fim) {
@@ -19,6 +21,15 @@ class ValidacaoOperacionalService
 
         $inicioCarbon = Carbon::parse($inicio);
         $fimCarbon = Carbon::parse($fim);
+
+        if ($inicioCarbon->lt(self::DATA_OPERACIONAL_MINIMA) || $fimCarbon->lt(self::DATA_OPERACIONAL_MINIMA)) {
+            return [
+                'valido' => false,
+                'anomalia' => false,
+                'status' => 'SEM_REALIZADO',
+                'motivo' => null,
+            ];
+        }
 
         if ($fimCarbon->lessThan($inicioCarbon)) {
             return [

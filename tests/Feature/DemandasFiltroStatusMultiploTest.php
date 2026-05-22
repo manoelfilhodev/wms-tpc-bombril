@@ -47,6 +47,24 @@ class DemandasFiltroStatusMultiploTest extends TestCase
             ->assertSee('DT-SEPARANDO-002');
     }
 
+    public function test_data_invalida_de_1970_nao_coloca_dt_como_separando(): void
+    {
+        $this->actingAs($this->createUser());
+
+        Demanda::create($this->demandaData('DT-INICIO-INVALIDO-001', 'A_SEPARAR', [
+            'possui_sobra' => true,
+            'separacao_iniciada_em' => '1970-01-01 00:00:00',
+        ]));
+
+        $this->get(route('demandas.index', ['status' => 'SEPARANDO']))
+            ->assertOk()
+            ->assertDontSee('DT-INICIO-INVALIDO-001');
+
+        $this->get(route('demandas.index', ['status' => 'A_SEPARAR']))
+            ->assertOk()
+            ->assertSee('DT-INICIO-INVALIDO-001');
+    }
+
     public function test_filtro_a_separar_nao_retorna_dt_ja_separada_mesmo_com_status_antigo(): void
     {
         $this->actingAs($this->createUser());

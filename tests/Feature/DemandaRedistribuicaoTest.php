@@ -90,6 +90,41 @@ class DemandaRedistribuicaoTest extends TestCase
         ]);
     }
 
+    public function test_distribuicao_corrige_inicio_invalido_de_1970_somente_na_dt_alvo(): void
+    {
+        $this->actingAs($this->createUser())
+            ->withSession(['tipo' => 'admin', 'nivel' => 'Admin']);
+
+        $demandaAlvo = $this->createDemandaComPicking(500, 5);
+        $demandaAlvo->forceFill([
+            'status' => 'A_SEPARAR',
+            'separacao_iniciada_em' => '1970-01-01 00:00:00',
+        ])->save();
+
+        $outraDemanda = $this->createDemandaComPicking(300, 3);
+        $outraDemanda->forceFill([
+            'status' => 'A_SEPARAR',
+            'separacao_iniciada_em' => '1970-01-01 00:00:00',
+        ])->save();
+
+        $this->post(route('demandas.distribuir', $demandaAlvo->id), [
+            'separador_nome' => 'Maria',
+            'quantidade_pecas' => 500,
+            'quantidade_skus' => 5,
+        ])->assertSessionHas('success');
+
+        $this->assertDatabaseHas('_tb_demanda', [
+            'id' => $demandaAlvo->id,
+            'status' => 'SEPARANDO',
+        ]);
+        $this->assertTrue($demandaAlvo->fresh()->separacao_iniciada_em->gte('2000-01-01 00:00:00'));
+
+        $this->assertSame(
+            '1970-01-01 00:00:00',
+            $outraDemanda->fresh()->separacao_iniciada_em->format('Y-m-d H:i:s')
+        );
+    }
+
     public function test_fluxo_de_distribuicao_da_tela_operacional_gera_logs_de_auditoria(): void
     {
         $this->actingAs($this->createUser())

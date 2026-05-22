@@ -31,9 +31,17 @@
                 </li>
                 <li class="side-nav-item">
                     <a href="{{ route('expedicao.apontamentos-operacionais.index') }}"
-                        class="side-nav-link {{ request()->routeIs('expedicao.*') ? 'active' : '' }}">
+                        class="side-nav-link {{ request()->routeIs('expedicao.apontamentos-operacionais.*', 'expedicao.previsibilidade.*', 'expedicao.saida-veiculos.*', 'expedicao.importacao-programacao.*') ? 'active' : '' }}">
                         <i class="mdi mdi-truck-fast-outline"></i>
                         <span> Expedição </span>
+                    </a>
+                </li>
+
+                <li class="side-nav-item">
+                    <a href="{{ route('expedicao.timeline-dts.index') }}"
+                        class="side-nav-link {{ request()->routeIs('expedicao.timeline-dts.*') ? 'active' : '' }}">
+                        <i class="mdi mdi-timeline-clock-outline"></i>
+                        <span> TimeLine </span>
                     </a>
                 </li>
 

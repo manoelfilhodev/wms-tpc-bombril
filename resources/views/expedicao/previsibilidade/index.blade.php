@@ -175,14 +175,227 @@
             height: calc(100vh - var(--ops-header-height) - var(--ops-summary-height) - var(--ops-footer-height));
             min-height: 260px;
             padding: clamp(10px, 1.6vw, 20px) clamp(8px, 1.4vw, 16px) clamp(10px, 1.6vw, 20px);
+            overflow: hidden;
+            overscroll-behavior: contain;
+            scrollbar-color: rgba(0, 174, 255, .42) rgba(255, 255, 255, .06);
+        }
+
+        .ops-board-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 8fr) minmax(520px, 4fr);
+            gap: clamp(8px, .9vw, 14px);
+            height: 100%;
+            min-height: 0;
+        }
+
+        .ops-active-board {
+            min-width: 0;
+            min-height: 0;
             overflow-x: auto;
             overflow-y: hidden;
-            overscroll-behavior: contain;
             scrollbar-color: rgba(0, 174, 255, .42) rgba(255, 255, 255, .06);
         }
 
         .ops-summary {
             padding: clamp(10px, 1.6vw, 20px) clamp(8px, 1.4vw, 16px) 0;
+        }
+
+        .ops-summary-toolbar {
+            display: flex;
+            align-items: stretch;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+            padding-inline: 4px;
+        }
+
+        .ops-demand-filter {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            min-width: 220px;
+        }
+
+        .ops-demand-filter label {
+            display: block;
+            margin-bottom: 5px;
+            color: #7fa6c9;
+            font-size: 11px;
+            font-weight: 1000;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .ops-demand-select {
+            min-width: 190px;
+            min-height: 36px;
+            border: 1px solid rgba(0, 174, 255, .34);
+            border-radius: 8px;
+            background:
+                linear-gradient(180deg, rgba(12, 28, 48, .98), rgba(4, 12, 22, .98));
+            color: #f8fafc;
+            font-size: 13px;
+            font-weight: 900;
+            outline: none;
+            padding: 8px 36px 8px 12px;
+            box-shadow: inset 0 0 16px rgba(0, 174, 255, .05);
+        }
+
+        .ops-demand-select:focus {
+            border-color: rgba(67, 154, 247, .9);
+            box-shadow: 0 0 0 3px rgba(67, 154, 247, .18);
+        }
+
+        .ops-demand-select option {
+            background: #0b1624;
+            color: #f8fafc;
+            font-weight: 800;
+        }
+
+        .ops-finished-columns {
+            min-width: 0;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: clamp(8px, .9vw, 14px);
+        }
+
+        .ops-finished-card {
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            border: 1px solid rgba(57, 211, 83, .24);
+            border-radius: 10px;
+            background:
+                linear-gradient(135deg, rgba(20, 83, 45, .22), rgba(4, 14, 24, .92));
+            box-shadow: inset 0 0 18px rgba(57, 211, 83, .035);
+            padding: clamp(12px, 1vw, 16px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ops-finished-card.loaded {
+            border-color: rgba(14, 165, 233, .30);
+            background:
+                linear-gradient(135deg, rgba(3, 105, 161, .22), rgba(4, 14, 24, .92));
+        }
+
+        .ops-finished-card.loaded .ops-finished-head,
+        .ops-finished-card.loaded .ops-finished-time,
+        .ops-finished-card.loaded .ops-finished-head i {
+            color: #7dd3fc;
+        }
+
+        .ops-finished-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            color: #9ef3ac;
+            font-size: clamp(12px, .85vw, 15px);
+            font-weight: 1000;
+            letter-spacing: .06em;
+            line-height: 1.2;
+            text-transform: uppercase;
+        }
+
+        .ops-finished-head i {
+            color: #39d353;
+            font-size: clamp(22px, 1.55vw, 30px);
+        }
+
+        .ops-finished-body {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            align-items: end;
+            gap: 10px;
+            margin-top: 6px;
+        }
+
+        .ops-finished-value {
+            color: #fff;
+            font-size: clamp(34px, 2.7vw, 52px);
+            font-weight: 1000;
+            line-height: 1;
+        }
+
+        .ops-finished-detail {
+            color: #8fb5d7;
+            font-size: clamp(11px, .82vw, 14px);
+            font-weight: 800;
+            line-height: 1.35;
+            text-transform: uppercase;
+        }
+
+        .ops-finished-list-wrap {
+            flex: 1 1 auto;
+            min-height: 0;
+            margin-top: 14px;
+            overflow-x: hidden;
+            overflow-y: auto;
+            border-top: 1px solid rgba(148, 163, 184, .14);
+            padding-top: 12px;
+            scrollbar-color: rgba(57, 211, 83, .44) rgba(255, 255, 255, .06);
+        }
+
+        .ops-finished-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .ops-finished-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: end;
+            gap: 8px 10px;
+            min-height: 82px;
+            padding: 12px;
+            border: 1px solid rgba(57, 211, 83, .18);
+            border-radius: 10px;
+            background:
+                linear-gradient(135deg, rgba(21, 128, 61, .16), rgba(4, 12, 22, .82));
+        }
+
+        .ops-finished-card.loaded .ops-finished-item {
+            border-color: rgba(14, 165, 233, .20);
+            background:
+                linear-gradient(135deg, rgba(3, 105, 161, .18), rgba(4, 12, 22, .82));
+        }
+
+        .ops-finished-dt {
+            color: #fff;
+            font-size: clamp(24px, 1.85vw, 40px);
+            font-weight: 1000;
+            line-height: 1;
+            letter-spacing: 0;
+            grid-column: 1 / -1;
+        }
+
+        .ops-finished-meta {
+            min-width: 0;
+            color: #9fb3c8;
+            font-size: clamp(11px, .82vw, 14px);
+            font-weight: 900;
+            line-height: 1.2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .ops-finished-time {
+            color: #9ef3ac;
+            font-size: clamp(13px, .95vw, 16px);
+            font-weight: 1000;
+            white-space: nowrap;
+        }
+
+        .ops-finished-empty {
+            color: #7592ad;
+            font-size: 12px;
+            font-weight: 900;
+            padding: 8px 0 2px;
+            text-transform: uppercase;
         }
 
         .ops-summary-grid {
@@ -265,6 +478,7 @@
             font-size: clamp(26px, 2vw, 38px);
             font-weight: 1000;
             line-height: .9;
+            overflow-wrap: anywhere;
         }
 
         .summary-percent {
@@ -472,6 +686,18 @@
         .badge-grey {
             background: #7d8793;
             color: #fff;
+        }
+
+        .badge-programmed {
+            background: #475569;
+            color: #dbeafe;
+            border: 1px solid rgba(147, 197, 253, .34);
+        }
+
+        .badge-opportunity {
+            background: #6d28d9;
+            color: #f5f3ff;
+            border: 1px solid rgba(196, 181, 253, .36);
         }
 
         .badge-yellow {
@@ -808,8 +1034,38 @@
                 padding-bottom: 120px;
             }
 
+            .ops-board-layout {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+
+            .ops-finished-columns {
+                grid-template-columns: 1fr;
+            }
+
+            .ops-active-board {
+                overflow-x: visible;
+            }
+
+            .ops-finished-card {
+                height: auto;
+                max-height: none;
+            }
+
+            .ops-finished-list-wrap {
+                max-height: 320px;
+            }
+
             .ops-summary {
                 padding-bottom: 4px;
+            }
+
+            .ops-summary-toolbar {
+                flex-direction: column;
+            }
+
+            .ops-finished-card {
+                width: 100%;
             }
 
             .ops-footer-inner {
@@ -842,8 +1098,24 @@
                 padding-bottom: 24px;
             }
 
+            .ops-board-layout {
+                display: block;
+            }
+
+            .ops-finished-columns {
+                display: grid;
+                grid-template-columns: 1fr;
+                margin-top: 14px;
+            }
+
             .ops-summary-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .ops-demand-filter,
+            .ops-demand-filter > div,
+            .ops-demand-select {
+                width: 100%;
             }
 
             .flight-board {
@@ -994,6 +1266,47 @@
     </div>
 
     <div class="ops-summary">
+        <div class="ops-summary-toolbar">
+            <form method="GET" class="ops-demand-filter">
+                <div>
+                    <label for="tipo_demanda">Demanda</label>
+                    <select name="tipo_demanda" id="tipo_demanda" class="ops-demand-select" onchange="this.form.submit()">
+                        <option value="TODAS" @selected(($tipoDemanda ?? 'TODAS') === 'TODAS')>Todas</option>
+                        <option value="PROGRAMADA" @selected(($tipoDemanda ?? 'TODAS') === 'PROGRAMADA')>Programada</option>
+                        <option value="OPORTUNIDADE" @selected(($tipoDemanda ?? 'TODAS') === 'OPORTUNIDADE')>Oportunidade</option>
+                    </select>
+                </div>
+            </form>
+        </div>
+
+        <div class="ops-summary-grid mb-3">
+            @foreach (($capacidadeOperacional['cards'] ?? []) as $card)
+                <div class="ops-summary-card {{ $card['classe'] ?? 'neutral' }}">
+                    <div class="summary-head">
+                        <div class="summary-title">
+                            {{ $card['titulo'] }}
+                        </div>
+
+                        <i class="mdi {{ $card['icone'] }} summary-icon"></i>
+                    </div>
+
+                    <div class="summary-value-row">
+                        <div class="summary-value">
+                            {{ $card['valor'] }}
+                        </div>
+
+                        <div class="summary-percent">
+                            {{ number_format((float) $card['percentual'], 1, ',', '.') }}%
+                        </div>
+                    </div>
+
+                    <div class="summary-detail">
+                        {{ $card['detalhe'] }}
+                    </div>
+                </div>
+            @endforeach
+        </div>
+
         <div class="ops-summary-grid">
             @foreach (($resumoOperacional['cards'] ?? []) as $card)
                 <div class="ops-summary-card {{ $card['classe'] ?? 'neutral' }}">
@@ -1024,6 +1337,8 @@
     </div>
 
     <div class="ops-board-wrapper">
+        <div class="ops-board-layout">
+            <div class="ops-active-board">
         <div class="flight-board">
 
             <div class="flight-board-header">
@@ -1135,6 +1450,10 @@
                     <div class="flight-cell" data-label="Tipo">
                         <span class="flight-badge badge-grey">
                             {{ $programacao->tipo_carga ?? '-' }}
+                        </span>
+
+                        <span class="flight-badge {{ $programacao->tipo_demanda_badge }}">
+                            {{ $programacao->tipo_demanda_label }}
                         </span>
 
                         @if ($previsao)
@@ -1349,11 +1668,93 @@
                     </div>
                 @empty
                     <div class="p-5 text-center text-muted">
-                        Nenhuma programação encontrada.
+                        Nenhuma DT ativa em acompanhamento. As carregadas e saídas ficam nas colunas laterais.
                     </div>
                 @endforelse
             </div>
 
+        </div>
+            </div>
+
+            <aside class="ops-finished-columns">
+                <div class="ops-finished-card loaded">
+                    <div class="ops-finished-head">
+                        <span>DTs finalizadas</span>
+                        <i class="mdi mdi-truck-cargo-container"></i>
+                    </div>
+                    <div class="ops-finished-body">
+                        <div class="ops-finished-value">
+                            {{ $resumoFinalizadas['carregadas']['total'] ?? 0 }}
+                        </div>
+                        <div class="ops-finished-detail">
+                            {{ $resumoFinalizadas['carregadas']['programadas'] ?? 0 }} programadas |
+                            {{ $resumoFinalizadas['carregadas']['oportunidades'] ?? 0 }} oportunidades<br>
+                            aguardando saída
+                        </div>
+                    </div>
+
+                    <div class="ops-finished-list-wrap ops-finished-scroller" id="opsLoadedScroller">
+                        <div class="ops-finished-list">
+                            @forelse (($resumoFinalizadas['carregadas']['itens'] ?? []) as $finalizada)
+                                <div class="ops-finished-item">
+                                    <div class="ops-finished-dt">
+                                        {{ $finalizada['dt'] }}
+                                    </div>
+                                    <div class="ops-finished-meta">
+                                        {{ $finalizada['destino'] }} • {{ $finalizada['tipo'] }}
+                                    </div>
+                                    <div class="ops-finished-time">
+                                        {{ $finalizada['finalizada_em'] ?? '--:--' }}
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="ops-finished-empty">
+                                    Nenhuma DT aguardando saída
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ops-finished-card">
+                    <div class="ops-finished-head">
+                        <span>Com saída de veículo</span>
+                        <i class="mdi mdi-truck-check-outline"></i>
+                    </div>
+                    <div class="ops-finished-body">
+                        <div class="ops-finished-value">
+                            {{ $resumoFinalizadas['com_saida']['total'] ?? 0 }}
+                        </div>
+                        <div class="ops-finished-detail">
+                            {{ $resumoFinalizadas['com_saida']['programadas'] ?? 0 }} programadas |
+                            {{ $resumoFinalizadas['com_saida']['oportunidades'] ?? 0 }} oportunidades<br>
+                            ciclo fechado
+                        </div>
+                    </div>
+
+                    <div class="ops-finished-list-wrap ops-finished-scroller" id="opsExitedScroller">
+                        <div class="ops-finished-list">
+                            @forelse (($resumoFinalizadas['com_saida']['itens'] ?? []) as $finalizada)
+                                <div class="ops-finished-item">
+                                    <div class="ops-finished-dt">
+                                        {{ $finalizada['dt'] }}
+                                    </div>
+                                    <div class="ops-finished-meta">
+                                        {{ $finalizada['destino'] }} • {{ $finalizada['tipo'] }}
+                                    </div>
+                                    <div class="ops-finished-time">
+                                        {{ $finalizada['finalizada_em'] ?? '--:--' }}
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="ops-finished-empty">
+                                    Nenhuma saída confirmada
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+            </aside>
         </div>
     </div>
 
@@ -1397,15 +1798,19 @@
         const liveRefresh = document.getElementById('opsLiveRefresh');
         const liveStatus = document.getElementById('opsLiveStatus');
         const summaryGrid = document.querySelector('.ops-summary-grid');
+        const finishedPanel = document.querySelector('.ops-finished-columns');
         let boardScroller = document.querySelector('.flight-board-body');
+        let finishedScrollers = Array.from(document.querySelectorAll('.ops-finished-scroller'));
         const refreshIntervalMs = 60 * 1000;
         const autoScrollDelayMs = 3500;
         const autoScrollStepPx = 1.1;
         const autoScrollIntervalMs = 30;
         const autoScrollLoopPauseMs = 5000;
+        const finishedScrollStepPx = .65;
         const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
         let autoScrollTimer = null;
         let autoScrollPauseTimer = null;
+        let finishedScrollTimer = null;
         let refreshStartedAt = Date.now();
         let syncInProgress = false;
 
@@ -1469,7 +1874,13 @@
                 const html = await response.text();
                 const doc = new DOMParser().parseFromString(html, 'text/html');
                 const nextSummaryGrid = doc.querySelector('.ops-summary-grid');
+                const nextFinishedPanel = doc.querySelector('.ops-finished-columns');
                 const nextBoardBody = doc.querySelector('.flight-board-body');
+
+                if (finishedPanel && nextFinishedPanel) {
+                    finishedPanel.innerHTML = nextFinishedPanel.innerHTML;
+                    finishedScrollers = Array.from(document.querySelectorAll('.ops-finished-scroller'));
+                }
 
                 if (summaryGrid && nextSummaryGrid) {
                     summaryGrid.innerHTML = nextSummaryGrid.innerHTML;
@@ -1484,6 +1895,7 @@
 
                 refreshStartedAt = Date.now();
                 syncPanelHeights();
+                startFinishedScroll();
                 startAutoScroll();
             } catch (error) {
                 if (liveStatus) {
@@ -1512,6 +1924,40 @@
                 clearTimeout(autoScrollPauseTimer);
                 autoScrollPauseTimer = null;
             }
+        }
+
+        function startFinishedScroll() {
+            if (finishedScrollTimer) {
+                clearInterval(finishedScrollTimer);
+                finishedScrollTimer = null;
+            }
+
+            finishedScrollers = Array.from(document.querySelectorAll('.ops-finished-scroller'));
+
+            if (
+                finishedScrollers.length === 0 ||
+                reduceMotion.matches ||
+                !finishedScrollers.some((scroller) => scroller.scrollHeight > scroller.clientHeight + 12)
+            ) {
+                return;
+            }
+
+            finishedScrollTimer = setInterval(() => {
+                finishedScrollers.forEach((scroller) => {
+                    const maxScroll = scroller.scrollHeight - scroller.clientHeight;
+
+                    if (maxScroll <= 12) {
+                        return;
+                    }
+
+                    if (scroller.scrollTop >= maxScroll - 2) {
+                        scroller.scrollTop = 0;
+                        return;
+                    }
+
+                    scroller.scrollTop += finishedScrollStepPx;
+                });
+            }, autoScrollIntervalMs);
         }
 
         function startAutoScroll() {
@@ -1555,6 +2001,7 @@
 
         syncPanelHeights();
         updateLiveRefreshLabel();
+        startFinishedScroll();
         startAutoScroll();
 
         setInterval(updateLiveRefreshLabel, 1000);
@@ -1563,12 +2010,16 @@
         window.addEventListener('resize', () => {
             syncPanelHeights();
             boardScroller = document.querySelector('.flight-board-body');
+            finishedScrollers = Array.from(document.querySelectorAll('.ops-finished-scroller'));
+            startFinishedScroll();
             startAutoScroll();
         });
 
         window.addEventListener('load', () => {
             syncPanelHeights();
             boardScroller = document.querySelector('.flight-board-body');
+            finishedScrollers = Array.from(document.querySelectorAll('.ops-finished-scroller'));
+            startFinishedScroll();
             startAutoScroll();
         });
     </script>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Expedicao;
 
 use App\Http\Controllers\Controller;
+use App\Models\Expedicao\ExpedicaoProgramacao;
 use App\Services\Expedicao\ImportacaoProgramacaoExpedicaoService;
 use App\Services\SystemLogService;
 use Illuminate\Http\Request;
@@ -48,6 +49,8 @@ class ImportacaoProgramacaoExpedicaoController extends Controller
                     }
                 },
             ],
+            'tipo_demanda' => ['nullable', 'string', 'in:' . implode(',', ExpedicaoProgramacao::tiposDemanda())],
+            'origem_demanda' => ['nullable', 'string', 'in:' . implode(',', ExpedicaoProgramacao::origensDemanda())],
         ], [
             'arquivo.required' => 'Selecione o arquivo da programação.',
             'arquivo.file' => 'O upload enviado não é um arquivo válido.',
@@ -55,7 +58,9 @@ class ImportacaoProgramacaoExpedicaoController extends Controller
         ]);
 
         try {
-            $resumo = $service->importar($request->file('arquivo'));
+            $tipoDemanda = $request->input('tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA);
+            $origemDemanda = $request->input('origem_demanda');
+            $resumo = $service->importar($request->file('arquivo'), $tipoDemanda, $origemDemanda);
 
             SystemLogService::record([
                 'module' => 'importacao',
@@ -64,6 +69,8 @@ class ImportacaoProgramacaoExpedicaoController extends Controller
                 'entity_type' => 'expedicao_programacao',
                 'new_values' => [
                     'arquivo' => $request->file('arquivo')?->getClientOriginalName(),
+                    'tipo_demanda' => $tipoDemanda,
+                    'origem_demanda' => $origemDemanda,
                     'resumo' => $resumo,
                 ],
             ]);

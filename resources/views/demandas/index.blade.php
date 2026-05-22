@@ -300,7 +300,7 @@
                                                     $statusDinamico = 'SEPARADO';
                                                     $statusDinamicoCor = 'success';
                                                 }
-                                            } elseif ($totalDistribuido > 0 || $d->separacao_iniciada_em) {
+                                            } elseif ($totalDistribuido > 0 || $d->separacao_iniciada_valida) {
                                                 $statusDinamico = 'SEPARANDO';
                                                 $statusDinamicoCor = 'primary';
                                             }
@@ -452,9 +452,7 @@
                         </div>
 
                         @php
-                            $inicio = $d->separacao_iniciada_em
-                                ? \Carbon\Carbon::parse($d->separacao_iniciada_em)
-                                : null;
+                            $inicio = $d->separacao_iniciada_valida;
                             $fim = $d->separacao_finalizada_em
                                 ? \Carbon\Carbon::parse($d->separacao_finalizada_em)
                                 : null;
