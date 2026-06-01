@@ -44,9 +44,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(append: [
             App\Http\Middleware\ApiRequestLogger::class,
         ]);
+        $middleware->web(append: [
+            App\Http\Middleware\EnsureOperationalRouteIsAuthenticated::class,
+        ]);
         $middleware->alias([
             'admin' => App\Http\Middleware\AdminMiddleware::class,
             'demanda.perfil' => App\Http\Middleware\DemandaPerfilMiddleware::class,
+            'module.permission' => App\Http\Middleware\EnsureModulePermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

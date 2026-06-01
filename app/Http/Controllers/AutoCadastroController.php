@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreAutoCadastroRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -26,16 +27,12 @@ class AutoCadastroController extends Controller
         return view('cadastro.form', ['token' => $token, 'invite' => $invite]);
     }
 
-    public function salvar(Request $request)
+    public function salvar(StoreAutoCadastroRequest $request)
     {
-        $token = $request->input('token');
-$nome = $request->input('nome');
-$email = $request->input('email');
-$senha = $request->input('senha');
+        $validated = $request->validated();
 
-    
         $invite = DB::table('user_invites')
-            ->where('token', $request->token)
+            ->where('token', $validated['token'])
             ->where('valido_ate', '>=', now())
             ->where('usado', false)
             ->first();
@@ -45,9 +42,9 @@ $senha = $request->input('senha');
         }
     
         $usuarioId = DB::table('_tb_usuarios')->insertGetId([
-            'nome' => strtoupper($request->nome),
-            'email' => strtolower($request->email),
-            'password' => Hash::make($request->senha),
+            'nome' => strtoupper($validated['nome']),
+            'email' => strtolower($validated['email']),
+            'password' => Hash::make($validated['senha']),
             'unidade_id' => $invite->unidade_padrao,
             'tipo' => $invite->nivel_padrao,
             'status' => 'ativo',
@@ -63,8 +60,8 @@ $senha = $request->input('senha');
             'usuario_id' => $usuarioId,
             'unidade_id' => $invite->unidade_padrao,
             'acao' => 'Auto Cadastro',
-            'dados' => '[NOVO USUÁRIO] - ' . strtoupper($request->nome) .
-                       ' realizou auto cadastro com e-mail ' . strtolower($request->email) .
+            'dados' => '[NOVO USUARIO] - ' . strtoupper($validated['nome']) .
+                       ' realizou auto cadastro com e-mail ' . strtolower($validated['email']) .
                        ', para a unidade "' . $nomeUnidade . '" (ID: ' . $invite->unidade_padrao . ')' .
                        ', nível de acesso: ' . $invite->nivel_padrao . '.',
             'ip_address' => request()->ip(),

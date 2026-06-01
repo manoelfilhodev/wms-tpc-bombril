@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 class DemandaPerfilMiddleware
 {
@@ -23,7 +24,7 @@ class DemandaPerfilMiddleware
         };
 
         if (! $permitido) {
-            return redirect()->route('demandas.index')->with('error', 'Acesso não autorizado para esta ação.');
+            abort(Response::HTTP_FORBIDDEN, 'Acesso nao autorizado para esta acao.');
         }
 
         return $next($request);
