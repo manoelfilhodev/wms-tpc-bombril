@@ -20,6 +20,8 @@ return [
 
     'url' => env('APP_URL', 'https://systex.com.br/wms'),
 
+    'force_https' => (bool) env('FORCE_HTTPS', env('APP_ENV') === 'production'),
+
     'timezone' => 'America/Sao_Paulo',
 
     'locale' => env('APP_LOCALE', 'en'),

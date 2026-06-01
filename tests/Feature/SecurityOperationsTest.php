@@ -133,6 +133,28 @@ class SecurityOperationsTest extends TestCase
         $this->get('/logout')->assertMethodNotAllowed();
     }
 
+    public function test_api_docs_are_hidden_when_disabled(): void
+    {
+        config(['scribe.wms_docs_enabled' => false]);
+
+        $this->get('/docs')->assertNotFound();
+        $this->get('/docs.openapi')->assertNotFound();
+        $this->get('/docs.postman')->assertNotFound();
+    }
+
+    public function test_api_docs_require_admin_when_enabled(): void
+    {
+        config(['scribe.wms_docs_enabled' => true]);
+
+        $this->get('/docs')->assertRedirect('/login');
+
+        $operator = $this->createSecurityUser('operador', 'Operador');
+
+        $this->actingAs($operator)->withSecuritySession($operator);
+
+        $this->get('/docs')->assertForbidden();
+    }
+
     private function createSecurityUser(string $tipo = 'operador', string $nivel = 'Operador'): User
     {
         $unidadeId = DB::table('_tb_unidades')->insertGetId([

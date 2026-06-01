@@ -22,6 +22,16 @@ class ApiDocsAccess
             abort(404);
         }
 
+        $user = $request->user();
+
+        if (! $user) {
+            return redirect()->guest(route('login'));
+        }
+
+        if (! method_exists($user, 'hasPermission') || ! $user->hasPermission('admin.access')) {
+            abort(403);
+        }
+
         return $next($request);
     }
 }
