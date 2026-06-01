@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\SecurityEvent;
 use App\Http\Requests\LoginRequest;
 use App\Models\User;
 use App\Services\DeviceAuthorizationService;
+use App\Services\SecurityAuditService;
 use App\Services\SystemLogService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 class AuthController extends Controller
 {
@@ -66,9 +69,15 @@ class AuthController extends Controller
                 );
             }
 
-            return back()->with('error', 'Login ou senha invalido');
+            app(SecurityAuditService::class)->recordSecurityEvent(
+                new SecurityEvent(SecurityEvent::LOGIN_FAILURE, ['module' => 'login']),
+                $request
+            );
+
+            return back()->with('error', 'Credenciais invalidas.');
         }
 
+        $this->invalidateOtherSessions((int) Auth::id(), $request->session()->getId());
         $request->session()->regenerate();
 
         $usuario = Auth::user();
@@ -103,6 +112,14 @@ class AuthController extends Controller
             'entity_id' => $usuario->id_user,
             'new_values' => ['email' => $usuario->email, 'device_id' => $deviceId ?: null],
         ]);
+
+        app(SecurityAuditService::class)->recordSecurityEvent(
+            new SecurityEvent(SecurityEvent::LOGIN_SUCCESS, [
+                'module' => 'login',
+                'user_id' => $usuario->id_user,
+            ]),
+            $request
+        );
 
         $redirect = $usuario->tipo === 'operador'
             ? redirect()->route('painel.operador')
@@ -153,6 +170,10 @@ class AuthController extends Controller
             'entity_id' => $user->id_user,
         ]);
 
+        app(SecurityAuditService::class)->record('logout', 'login', [
+            'user_id' => $user->id_user,
+        ], $request);
+
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
@@ -183,6 +204,11 @@ public function apiLogin(Request $request)
                 $request
             );
         }
+
+        app(SecurityAuditService::class)->recordSecurityEvent(
+            new SecurityEvent(SecurityEvent::LOGIN_FAILURE, ['module' => 'login']),
+            $request
+        );
 
         return response()->json(['message' => 'Credenciais invalidas'], 401);
     }
@@ -232,6 +258,14 @@ public function apiLogin(Request $request)
         'new_values' => ['email' => $user->email, 'device_id' => $deviceId ?: null],
     ]);
 
+    app(SecurityAuditService::class)->recordSecurityEvent(
+        new SecurityEvent(SecurityEvent::LOGIN_SUCCESS, [
+            'module' => 'login',
+            'user_id' => $user->id_user,
+        ]),
+        $request
+    );
+
     // 🚀 RESPOSTA FINAL
     return response()->json([
         'token' => $token,
@@ -258,6 +292,18 @@ public function apiLogin(Request $request)
             'navegador' => $request->header('User-Agent'),
             'created_at' => now(),
         ]);
+    }
+
+    private function invalidateOtherSessions(int $userId, string $currentSessionId): void
+    {
+        if (! Schema::hasTable('sessions')) {
+            return;
+        }
+
+        DB::table('sessions')
+            ->where('user_id', $userId)
+            ->where('id', '!=', $currentSessionId)
+            ->delete();
     }
 
     private function microsoftLogoutUrl(): string

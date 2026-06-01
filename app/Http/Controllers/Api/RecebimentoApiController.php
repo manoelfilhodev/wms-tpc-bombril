@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Setores\Recebimento;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class RecebimentoApiController extends Controller
 {
@@ -40,17 +41,8 @@ class RecebimentoApiController extends Controller
         'foto' => 'required|image|max:5120', // até 5MB
     ]);
 
-    // Garante que a pasta existe
-    $pasta = public_path('recebimento/fotos_inicio');
-    if (!file_exists($pasta)) {
-        mkdir($pasta, 0755, true);
-    }
-
-    // Nome do arquivo
-    $nomeArquivo = uniqid('foto_inicio_') . '.' . $request->file('foto')->getClientOriginalExtension();
-
-    // Move para a pasta
-    $request->file('foto')->move($pasta, $nomeArquivo);
+    $nomeArquivo = 'foto_inicio_' . Str::uuid() . '.' . $request->file('foto')->extension();
+    $request->file('foto')->storeAs('public/recebimento/fotos_inicio', $nomeArquivo);
 
     // Caminho relativo
     $caminhoRelativo = 'recebimento/fotos_inicio/' . $nomeArquivo;
@@ -83,20 +75,11 @@ public function fecharConferencia(Request $request, $id)
         'assinatura' => 'required|image|max:2048',
     ]);
 
-    $pastaFotoFim = public_path('recebimento/fotos_fim');
-    $pastaAssinatura = public_path('recebimento/assinaturas');
-    
+    $nomeFotoFim = 'foto_fim_' . Str::uuid() . '.' . $request->file('foto_final')->extension();
+    $request->file('foto_final')->storeAs('public/recebimento/fotos_fim', $nomeFotoFim);
 
-    if (!file_exists($pastaFotoFim)) mkdir($pastaFotoFim, 0755, true);
-    if (!file_exists($pastaAssinatura)) mkdir($pastaAssinatura, 0755, true);
-
-    // Foto final
-    $nomeFotoFim = uniqid('foto_fim_') . '.' . $request->file('foto_final')->getClientOriginalExtension();
-    $request->file('foto_final')->move($pastaFotoFim, $nomeFotoFim);
-
-    // Assinatura
-    $nomeAssinatura = uniqid('assinatura_') . '.' . $request->file('assinatura')->getClientOriginalExtension();
-    $request->file('assinatura')->move($pastaAssinatura, $nomeAssinatura);
+    $nomeAssinatura = 'assinatura_' . Str::uuid() . '.' . $request->file('assinatura')->extension();
+    $request->file('assinatura')->storeAs('public/recebimento/assinaturas', $nomeAssinatura);
 
     // Atualiza no banco
     DB::table('_tb_recebimento')
@@ -117,7 +100,7 @@ public function uploadFotoFim(Request $request, $id)
     ]);
 
     // salva em storage/app/public/recebimento/fotos_fim
-    $fileName = 'foto_final_'.$id.'_'.uniqid().'.'.$request->file('foto_final')->extension();
+    $fileName = 'foto_final_' . Str::uuid() . '.' . $request->file('foto_final')->extension();
     $path = $request->file('foto_final')->storeAs('public/recebimento/fotos_fim', $fileName);
 
     // caminho relativo público: /storage/recebimento/fotos_fim/arquivo
@@ -144,7 +127,7 @@ public function uploadAssinaturaFim(Request $request, $id)
         }
 
         $file = $request->file('assinatura_fim');
-        $filename = 'assinatura_fim_' . $id . '.' . $file->getClientOriginalExtension();
+        $filename = 'assinatura_fim_' . Str::uuid() . '.' . $file->extension();
         $path = $file->storeAs('public/recebimentos', $filename);
 
         // Atualiza no banco

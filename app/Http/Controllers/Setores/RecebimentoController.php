@@ -9,6 +9,7 @@ use App\Models\Setores\RecebimentoItem;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class RecebimentoController extends Controller
 {
@@ -80,8 +81,8 @@ class RecebimentoController extends Controller
             $fornecedor = (string) $xml->NFe->infNFe->emit->xNome;
             $transportadora = (string) ($xml->NFe->infNFe->transp->transporta->xNome ?? 'TRANSPORTADORA DESCONHECIDA');
 
-            $nomeXML = 'nfe_' . time() . '.' . $request->file('xml_nfe')->getClientOriginalExtension();
-            $request->file('xml_nfe')->move(public_path('xml_nfe'), $nomeXML);
+            $nomeXML = 'nfe_' . Str::uuid() . '.xml';
+            $request->file('xml_nfe')->storeAs('recebimentos/xml_nfe', $nomeXML);
 
             $recebimentoId = DB::table('_tb_recebimento')->insertGetId([
                 'unidade_id'       => Auth::user()->unidade_id ?? 1,
@@ -97,7 +98,7 @@ class RecebimentoController extends Controller
                 'horario_janela'   => $request->horario_janela,
                 'horario_chegada'  => $request->horario_chegada,
                 'doca'             => $request->doca,
-                'xml_nfe'          => $nomeXML,
+                'xml_nfe'          => 'recebimentos/xml_nfe/' . $nomeXML,
                 'created_at'       => now(),
                 'updated_at'       => now()
             ]);

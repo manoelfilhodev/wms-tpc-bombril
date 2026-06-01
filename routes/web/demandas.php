@@ -13,7 +13,7 @@ Route::get('/demandas/import', function () {
 
 
 
-Route::prefix('demandas')->middleware(['auth'])->group(function () {
+Route::prefix('demandas')->middleware(['auth', 'permission:demandas.view'])->group(function () {
     Route::get('/', [DemandaController::class, 'index'])->name('demandas.index');
     Route::get('/operacional', [DemandaController::class, 'operacional'])->middleware('demanda.perfil:operacional')->name('demandas.operacional');
     Route::post('/operacional/filtrar-dts', [DemandaController::class, 'filtrarOperacionalDts'])->middleware('demanda.perfil:operacional')->name('demandas.operacional.filtrarDts');
@@ -25,7 +25,7 @@ Route::prefix('demandas')->middleware(['auth'])->group(function () {
     Route::get('/identificacao-a4', [DemandaController::class, 'identificacaoA4'])->middleware('demanda.perfil:operacional')->name('demandas.identificacaoA4');
     Route::post('/identificacao-a4/auditar-impressao', [DemandaController::class, 'auditarImpressaoIdentificacaoA4'])->middleware('demanda.perfil:operacional')->name('demandas.identificacaoA4.auditPrint');
     Route::get('/create', [DemandaController::class, 'create'])->middleware('demanda.perfil:sala')->name('demandas.create');
-    Route::post('/store', [DemandaController::class, 'store'])->middleware('demanda.perfil:sala')->name('demandas.store.manual');
+    Route::post('/store', [DemandaController::class, 'store'])->middleware(['demanda.perfil:sala', 'permission:demandas.edit'])->name('demandas.store.manual');
     Route::post('/{id}/iniciar-separacao', [DemandaController::class, 'iniciarSeparacao'])->middleware('demanda.perfil:operacional')->name('demandas.iniciarSeparacao');
     Route::post('/{id}/finalizar-separacao', [DemandaController::class, 'finalizarSeparacao'])->middleware('demanda.perfil:operacional')->name('demandas.finalizarSeparacao');
     Route::post('/{id}/finalizar-separador', [DemandaController::class, 'finalizarSeparador'])->middleware('demanda.perfil:operacional')->name('demandas.finalizarSeparador');
@@ -35,7 +35,7 @@ Route::prefix('demandas')->middleware(['auth'])->group(function () {
     Route::patch('/{id}/stage', [DemandaController::class, 'updateStage'])->middleware('demanda.perfil:operacional')->name('demandas.updateStage');
 });
 
-Route::resource('demandas', DemandaController::class)->except(['show'])->middleware(['auth']);
-Route::get('/demandas/export', [DemandaController::class, 'export'])->middleware(['auth'])->name('demandas.export');
-Route::patch('/demandas/{id}/status', [DemandaController::class, 'updateStatus'])->middleware(['auth'])->name('demandas.updateStatus');
-Route::patch('/demandas/update-multiple', [DemandaController::class, 'updateMultiple'])->middleware(['auth'])->name('demandas.updateMultiple');
+Route::resource('demandas', DemandaController::class)->except(['show'])->middleware(['auth', 'permission:demandas.view']);
+Route::get('/demandas/export', [DemandaController::class, 'export'])->middleware(['auth', 'permission:demandas.view'])->name('demandas.export');
+Route::patch('/demandas/{id}/status', [DemandaController::class, 'updateStatus'])->middleware(['auth', 'permission:demandas.edit'])->name('demandas.updateStatus');
+Route::patch('/demandas/update-multiple', [DemandaController::class, 'updateMultiple'])->middleware(['auth', 'permission:demandas.edit'])->name('demandas.updateMultiple');
