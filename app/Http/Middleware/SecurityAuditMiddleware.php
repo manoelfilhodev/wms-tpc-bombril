@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Services\SecurityAuditService;
 use Closure;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 class SecurityAuditMiddleware
 {
@@ -12,12 +13,14 @@ class SecurityAuditMiddleware
     {
     }
 
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next): Response
     {
         $response = $next($request);
 
         if ($request->user() && in_array($request->method(), ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
-            $this->audit->record($this->actionFor($request), null, [], $request);
+            $this->audit->record($this->actionFor($request), null, [
+                'response_status' => $response->getStatusCode(),
+            ], $request);
         }
 
         return $response;

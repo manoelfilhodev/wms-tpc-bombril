@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Enums\AuditSeverity;
 use App\Events\SecurityEvent;
+use App\Http\Middleware\RequestCorrelationMiddleware;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -27,6 +29,9 @@ class SecurityAuditService
         '_token',
     ];
 
+    /**
+     * @param array<string, mixed> $payload
+     */
     public function record(string $action, ?string $module = null, array $payload = [], ?Request $request = null): ?AuditLog
     {
         try {
@@ -34,19 +39,27 @@ class SecurityAuditService
                 return null;
             }
 
-            $request ??= request();
+            $request = $request ?: request();
             $user = Auth::user();
 
-            return AuditLog::create([
+            $log = AuditLog::create([
                 'user_id' => $payload['user_id'] ?? $user?->getAuthIdentifier(),
                 'action' => $action,
                 'module' => $module ?? $this->moduleFromRequest($request),
-                'route' => $request?->route()?->getName() ?: $request?->path(),
-                'method' => $request?->method(),
-                'ip' => $request?->ip(),
-                'user_agent' => $request?->userAgent(),
+                'severity' => $this->severityFor($action, $payload)->value,
+                'correlation_id' => $payload['correlation_id'] ?? $request->attributes->get(RequestCorrelationMiddleware::CORRELATION_ID),
+                'request_id' => $payload['request_id'] ?? $request->attributes->get(RequestCorrelationMiddleware::REQUEST_ID),
+                'route' => $request->route()?->getName() ?: $request->path(),
+                'method' => $request->method(),
+                'response_status' => $payload['response_status'] ?? null,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
                 'payload_resumo' => $this->sanitize($payload ?: $this->safeRequestSummary($request)),
             ]);
+
+            app(SecurityMonitorService::class)->inspect($log);
+
+            return $log;
         } catch (Throwable $exception) {
             Log::warning('security_audit_failed', [
                 'action' => $action,
@@ -58,17 +71,35 @@ class SecurityAuditService
         }
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function severityFor(string $action, array $payload): AuditSeverity
+    {
+        if (isset($payload['severity'])) {
+            return AuditSeverity::tryFrom((string) $payload['severity']) ?? AuditSeverity::INFO;
+        }
+
+        return match ($action) {
+            SecurityEvent::LOGIN_FAILURE,
+            SecurityEvent::ACCESS_DENIED,
+            SecurityEvent::PERMISSION_DENIED,
+            SecurityEvent::RATE_LIMIT_TRIGGERED,
+            'blocked_malicious_upload' => AuditSeverity::WARNING,
+            default => AuditSeverity::INFO,
+        };
+    }
+
     public function recordSecurityEvent(SecurityEvent $event, ?Request $request = null): ?AuditLog
     {
         return $this->record($event->type, $event->context['module'] ?? 'security', $event->context, $request);
     }
 
-    private function safeRequestSummary(?Request $request): array
+    /**
+     * @return array<string, mixed>
+     */
+    private function safeRequestSummary(Request $request): array
     {
-        if (! $request) {
-            return [];
-        }
-
         $summary = $request->except(self::SENSITIVE_KEYS);
 
         foreach ($request->allFiles() as $key => $file) {
@@ -120,12 +151,8 @@ class SecurityAuditService
         return false;
     }
 
-    private function moduleFromRequest(?Request $request): ?string
+    private function moduleFromRequest(Request $request): string
     {
-        if (! $request) {
-            return null;
-        }
-
         return str($request->path())->before('/')->toString();
     }
 }

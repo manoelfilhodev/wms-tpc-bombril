@@ -44,12 +44,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->api(append: [
+            App\Http\Middleware\RequestCorrelationMiddleware::class,
             App\Http\Middleware\BlockMaliciousUploads::class,
             App\Http\Middleware\SecurityHeaders::class,
             App\Http\Middleware\SecurityAuditMiddleware::class,
             App\Http\Middleware\ApiRequestLogger::class,
         ]);
         $middleware->web(append: [
+            App\Http\Middleware\RequestCorrelationMiddleware::class,
             App\Http\Middleware\BlockMaliciousUploads::class,
             App\Http\Middleware\SecurityHeaders::class,
             App\Http\Middleware\EnsureOperationalRouteIsAuthenticated::class,
@@ -79,7 +81,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 'success' => false,
                 'message' => 'Recurso nao encontrado.',
                 'data' => (object) [],
-                'meta' => (object) [],
+                'meta' => [
+                    'correlation_id' => $request->attributes->get('correlation_id'),
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
             ], 404);
         });
 
@@ -94,7 +99,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 'data' => [
                     'errors' => $exception->errors(),
                 ],
-                'meta' => (object) [],
+                'meta' => [
+                    'correlation_id' => $request->attributes->get('correlation_id'),
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
             ], 422);
         });
 
@@ -107,7 +115,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 'success' => false,
                 'message' => 'Nao autenticado.',
                 'data' => (object) [],
-                'meta' => (object) [],
+                'meta' => [
+                    'correlation_id' => $request->attributes->get('correlation_id'),
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
             ], 401);
         });
 
@@ -142,7 +153,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 'success' => false,
                 'message' => $message,
                 'data' => (object) [],
-                'meta' => (object) [],
+                'meta' => [
+                    'correlation_id' => $request->attributes->get('correlation_id'),
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
             ], $statusCode);
         });
     })->create();

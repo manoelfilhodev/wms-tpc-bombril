@@ -73,7 +73,10 @@ class AppServiceProvider extends ServiceProvider
                 'success' => false,
                 'message' => 'Muitas tentativas. Tente novamente em instantes.',
                 'data' => (object) [],
-                'meta' => (object) [],
+                'meta' => [
+                    'correlation_id' => $request->attributes->get('correlation_id'),
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
             ], 429);
         }
 

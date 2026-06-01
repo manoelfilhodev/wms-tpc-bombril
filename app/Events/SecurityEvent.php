@@ -10,6 +10,9 @@ class SecurityEvent
     public const PERMISSION_DENIED = 'PERMISSION_DENIED';
     public const RATE_LIMIT_TRIGGERED = 'RATE_LIMIT_TRIGGERED';
 
+    /**
+     * @param array<string, mixed> $context
+     */
     public function __construct(
         public readonly string $type,
         public readonly array $context = []

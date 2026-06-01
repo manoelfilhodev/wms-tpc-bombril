@@ -522,6 +522,8 @@ Route::middleware(['auth', 'admin'])
     ->group(function () {
         Route::get('/logs', [\App\Http\Controllers\Admin\SystemLogController::class, 'index'])
             ->name('logs.index');
+        Route::get('/security', [\App\Http\Controllers\Admin\SecurityController::class, 'index'])
+            ->name('security.index');
     });
 
 Route::prefix('setores')->middleware('auth')->group(function () {
