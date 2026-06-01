@@ -91,9 +91,12 @@
             </a>
         </div>
         <div>
-            <a href="{{ route('logout') }}" class="btn btn-outline-light btn-sm d-flex align-items-center" title="Sair do sistema">
-                <i class="mdi mdi-logout me-1 fs-5"></i> Sair
-            </a>
+            <form method="POST" action="{{ route('logout') }}" class="m-0">
+                @csrf
+                <button type="submit" class="btn btn-outline-light btn-sm d-flex align-items-center" title="Sair do sistema">
+                    <i class="mdi mdi-logout me-1 fs-5"></i> Sair
+                </button>
+            </form>
         </div>
     </div>
 

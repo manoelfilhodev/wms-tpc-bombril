@@ -44,9 +44,12 @@
         </li>
 
         <li class="notification-list">
-            <a class="nav-link" href="{{ route('logout') }}" data-bs-container="body" data-bs-placement="bottom" data-bs-toggle="tooltip" title="Sair do sistema">
-                <i class="dripicons-power noti-icon text-danger"></i>
-            </a>
+            <form method="POST" action="{{ route('logout') }}" class="m-0">
+                @csrf
+                <button class="nav-link border-0 bg-transparent" type="submit" data-bs-container="body" data-bs-placement="bottom" data-bs-toggle="tooltip" title="Sair do sistema">
+                    <i class="dripicons-power noti-icon text-danger"></i>
+                </button>
+            </form>
         </li>
 
         <li class="dropdown notification-list wms-user-zone">
@@ -79,10 +82,13 @@
                     <span>Suporte</span>
                 </a>
 
-                <a href="{{ route('logout') }}" class="dropdown-item notify-item">
-                    <i class="mdi mdi-logout me-1"></i>
-                    <span>Sair</span>
-                </a>
+                <form method="POST" action="{{ route('logout') }}" class="m-0">
+                    @csrf
+                    <button type="submit" class="dropdown-item notify-item">
+                        <i class="mdi mdi-logout me-1"></i>
+                        <span>Sair</span>
+                    </button>
+                </form>
             </div>
         </li>
     </ul>

@@ -118,10 +118,6 @@
                 localStorage.setItem(key, deviceId);
                 localStorage.removeItem(legacyKey);
 
-                const secure = window.location.protocol === 'https:' ? '; secure' : '';
-                document.cookie = key + '=' + encodeURIComponent(deviceId) + '; path=/; max-age=31536000; samesite=lax' +
-                    secure;
-
                 const input = document.getElementById('current-device-id');
                 const button = document.getElementById('copy-device-id');
                 const feedback = document.getElementById('copy-device-feedback');

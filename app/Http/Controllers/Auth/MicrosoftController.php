@@ -44,7 +44,7 @@ class MicrosoftController extends Controller
                 '/',
                 null,
                 app()->environment('production'),
-                false,
+                true,
                 false,
                 'lax'
             ));
@@ -194,9 +194,8 @@ class MicrosoftController extends Controller
                     'tipo_usuario' => $user->tipo,
                     'nivel_usuario' => $user->nivel,
                     'device_id_cookie' => $deviceId,
-                    'cookie_novo' => $request->cookie(DeviceAuthorizationService::COOKIE_NAME),
-                    'cookie_legado' => $request->cookie(DeviceAuthorizationService::LEGACY_COOKIE_NAME),
-                    'todos_cookies' => $request->cookies->all(),
+                    'cookie_novo_presente' => $request->cookies->has(DeviceAuthorizationService::COOKIE_NAME),
+                    'cookie_legado_presente' => $request->cookies->has(DeviceAuthorizationService::LEGACY_COOKIE_NAME),
                 ]);
 
             if ($this->deviceAuthorization->requiresDeviceValidation($user)) {

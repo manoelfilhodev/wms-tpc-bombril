@@ -203,7 +203,7 @@ class SystemLogAuditTest extends TestCase
         $this->actingAs($operador)
             ->withSession(['tipo' => 'operador', 'nivel' => 'Operador'])
             ->get(route('admin.logs.index'))
-            ->assertRedirect(route('dashboard'));
+            ->assertForbidden();
     }
 
     private function actingAsAdmin(): User

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\LoginRequest;
 use App\Models\User;
 use App\Services\DeviceAuthorizationService;
 use App\Services\SystemLogService;
@@ -38,23 +39,19 @@ class AuthController extends Controller
                 60 * 24 * 365,
                 '/',
                 null,
-                false,
-                false,
+                app()->environment('production'),
+                true,
                 false,
                 'lax'
             ));
     }
 
-    public function login(Request $request)
+    public function login(LoginRequest $request)
     {
         $deviceId = $request->cookie(DeviceAuthorizationService::COOKIE_NAME)
             ?: $request->cookie(DeviceAuthorizationService::LEGACY_COOKIE_NAME);
         $deviceId = trim((string) $deviceId);
-        $credentials = $request->only('email', 'password');
-
-        if (empty($credentials['email']) || empty($credentials['password'])) {
-            return back()->with('error', 'Preencha todos os campos.');
-        }
+        $credentials = $request->validated();
 
         if (! Auth::attempt($credentials)) {
             $usuario = User::where('email', $credentials['email'])->first();
@@ -118,8 +115,8 @@ class AuthController extends Controller
                 60 * 24 * 365,
                 '/',
                 null,
-                false,
-                false,
+                app()->environment('production'),
+                true,
                 false,
                 'lax'
             ))
@@ -165,11 +162,14 @@ class AuthController extends Controller
 
 public function apiLogin(Request $request)
 {
-    $credentials = $request->only('email', 'password');
-
-    if (empty($credentials['email']) || empty($credentials['password'])) {
-        return response()->json(['message' => 'Preencha todos os campos.'], 422);
-    }
+    $credentials = $request->validate([
+        'email' => ['required', 'email:rfc', 'max:100'],
+        'password' => ['required', 'string', 'max:255'],
+    ], [
+        'email.required' => 'Informe o e-mail.',
+        'email.email' => 'Informe um e-mail valido.',
+        'password.required' => 'Informe a senha.',
+    ]);
 
     $user = User::where('email', $credentials['email'])->first();
 
