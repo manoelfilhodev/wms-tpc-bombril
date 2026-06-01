@@ -11,7 +11,6 @@ use Intervention\Image\ImageManager;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Intervention\Image\Drivers\Gd\Driver;
-use App\Http\Controllers\Setores\ConferenciaController;
 
 
 class ConferenciaController extends Controller

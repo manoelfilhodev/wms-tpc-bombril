@@ -5,28 +5,23 @@ namespace App\Models;
 use App\Enums\AuditSeverity;
 use Illuminate\Database\Eloquent\Model;
 
-class AuditLog extends Model
+class SecurityAlert extends Model
 {
     public const UPDATED_AT = null;
 
     protected $fillable = [
-        'user_id',
-        'action',
-        'module',
+        'type',
         'severity',
+        'title',
+        'description',
         'correlation_id',
         'request_id',
-        'route',
-        'method',
-        'response_status',
-        'ip',
-        'user_agent',
-        'payload_resumo',
+        'context',
     ];
 
     protected $casts = [
         'severity' => AuditSeverity::class,
-        'payload_resumo' => 'array',
+        'context' => 'array',
         'created_at' => 'datetime',
     ];
 }

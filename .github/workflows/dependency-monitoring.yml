@@ -1,0 +1,63 @@
+name: Dependency Monitoring
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          npm ci
+
+      - name: Composer Audit
+        id: composer_audit
+        continue-on-error: true
+        run: composer audit > composer-audit.txt
+
+      - name: NPM Audit
+        id: npm_audit
+        continue-on-error: true
+        run: npm audit > npm-audit.txt
+
+      - name: Open issue on dependency audit failure
+        if: steps.composer_audit.outcome == 'failure' || steps.npm_audit.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const composer = fs.existsSync('composer-audit.txt') ? fs.readFileSync('composer-audit.txt', 'utf8') : 'not run';
+            const npm = fs.existsSync('npm-audit.txt') ? fs.readFileSync('npm-audit.txt', 'utf8') : 'not run';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Dependency security audit failed',
+              body: `## Composer audit\n\n\`\`\`\n${composer.slice(0, 6000)}\n\`\`\`\n\n## NPM audit\n\n\`\`\`\n${npm.slice(0, 6000)}\n\`\`\``
+            });
+
+      - name: Fail if any audit failed
+        if: steps.composer_audit.outcome == 'failure' || steps.npm_audit.outcome == 'failure'
+        run: exit 1
