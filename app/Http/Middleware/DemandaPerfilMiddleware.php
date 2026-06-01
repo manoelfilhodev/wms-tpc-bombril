@@ -4,14 +4,21 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 class DemandaPerfilMiddleware
 {
     public function handle(Request $request, Closure $next, string $escopo = 'operacional')
     {
-        $tipo = strtolower((string) session('tipo', ''));
-        $nivel = strtolower((string) session('nivel', ''));
+        $user = Auth::user();
+
+        if ($user && method_exists($user, 'hasPermission') && $user->hasPermission('admin.access')) {
+            return $next($request);
+        }
+
+        $tipo = strtolower((string) (session('tipo') ?: $user?->tipo ?: ''));
+        $nivel = strtolower((string) (session('nivel') ?: $user?->nivel ?: ''));
 
         if ($this->isAdmin($tipo, $nivel)) {
             return $next($request);
