@@ -16,9 +16,15 @@ class ApontamentoOperacionalExpedicaoController extends Controller
     {
         $busca = trim((string) $request->input('busca', ''));
         $status = $request->input('status', 'todos');
+        $status = in_array($status, ['todos', 'conferencia_pendente', 'carregamento_pendente'], true)
+            ? $status
+            : 'todos';
+        $tipoDemanda = strtoupper((string) $request->input('tipo_demanda', 'TODAS'));
+        $tipoDemanda = in_array($tipoDemanda, ExpedicaoProgramacao::tiposDemanda(), true) ? $tipoDemanda : 'TODAS';
 
-        $programacoes = ExpedicaoProgramacao::query()
+        $baseProgramacoes = ExpedicaoProgramacao::query()
             ->orderByDesc('agenda_entrega_em')
+            ->when($tipoDemanda !== 'TODAS', fn ($query) => $query->where('tipo_demanda', $tipoDemanda))
             ->when($busca !== '', function ($query) use ($busca) {
                 $query->where(function ($query) use ($busca) {
                     $query->where('fo', 'like', "%{$busca}%")
@@ -26,19 +32,21 @@ class ApontamentoOperacionalExpedicaoController extends Controller
                         ->orWhere('cliente', 'like', "%{$busca}%");
                 });
             })
-            ->when($status === 'sem_explosao', function ($query) {
-                $query->whereNotExists(function ($query) {
-                    $query->selectRaw('1')
-                        ->from('_tb_demanda as d')
-                        ->whereColumn('d.fo', '_tb_expedicao_programacoes.fo');
-                });
-            })
+            ->whereExists(fn ($query) => $this->whereDemandaSeparada($query));
+
+        $resumoFila = $this->montarResumoFila(clone $baseProgramacoes);
+
+        $programacoes = $baseProgramacoes
+            ->whereExists(fn ($query) => $this->whereDemandaNaoExpedida($query))
             ->when($status === 'conferencia_pendente', function ($query) {
                 $query->whereExists(function ($query) {
                     $query->selectRaw('1')
                         ->from('_tb_demanda as d')
                         ->whereColumn('d.fo', '_tb_expedicao_programacoes.fo')
-                        ->whereNull('d.conferencia_finalizada_em');
+                        ->where(function ($query) {
+                            $query->whereNull('d.conferencia_finalizada_em')
+                                ->orWhere('d.conferencia_finalizada_em', '<', Demanda::DATA_OPERACIONAL_MINIMA);
+                        });
                 });
             })
             ->when($status === 'carregamento_pendente', function ($query) {
@@ -46,16 +54,12 @@ class ApontamentoOperacionalExpedicaoController extends Controller
                     $query->selectRaw('1')
                         ->from('_tb_demanda as d')
                         ->whereColumn('d.fo', '_tb_expedicao_programacoes.fo')
-                        ->whereNull('d.carregamento_finalizado_em');
-                });
-            })
-            ->when($status === 'finalizadas', function ($query) {
-                $query->whereExists(function ($query) {
-                    $query->selectRaw('1')
-                        ->from('_tb_demanda as d')
-                        ->whereColumn('d.fo', '_tb_expedicao_programacoes.fo')
                         ->whereNotNull('d.conferencia_finalizada_em')
-                        ->whereNotNull('d.carregamento_finalizado_em');
+                        ->where('d.conferencia_finalizada_em', '>=', Demanda::DATA_OPERACIONAL_MINIMA)
+                        ->where(function ($query) {
+                            $query->whereNull('d.carregamento_finalizado_em')
+                                ->orWhere('d.carregamento_finalizado_em', '<', Demanda::DATA_OPERACIONAL_MINIMA);
+                        });
                 });
             })
             ->paginate(20)
@@ -75,6 +79,8 @@ class ApontamentoOperacionalExpedicaoController extends Controller
             'programacoes' => $programacoes,
             'busca' => $busca,
             'status' => $status,
+            'tipoDemanda' => $tipoDemanda,
+            'resumoFila' => $resumoFila,
         ]);
     }
 
@@ -103,10 +109,32 @@ class ApontamentoOperacionalExpedicaoController extends Controller
         ]);
 
         if ($dados['acao'] === 'iniciar_agora') {
+            if ($demanda->{$campos['inicio']}) {
+                return back()->with('error', 'Esta etapa já possui horário de início. Use o lápis para editar manualmente.');
+            }
+
+            if (
+                $dados['etapa'] === 'carregamento' &&
+                ! $this->dataOperacionalValida($demanda->conferencia_finalizada_em)
+            ) {
+                return back()->with('error', 'Finalize a conferência antes de iniciar o carregamento.');
+            }
+
             $atualizacao[$campos['inicio']] = now();
         }
 
         if ($dados['acao'] === 'finalizar_agora') {
+            if ($demanda->{$campos['fim']}) {
+                return back()->with('error', 'Esta etapa já possui horário de fim. Use o lápis para editar manualmente.');
+            }
+
+            if (
+                $dados['etapa'] === 'carregamento' &&
+                ! $this->dataOperacionalValida($demanda->conferencia_finalizada_em)
+            ) {
+                return back()->with('error', 'Finalize a conferência antes de finalizar o carregamento.');
+            }
+
             $atualizacao[$campos['fim']] = now();
         }
 
@@ -158,5 +186,121 @@ class ApontamentoOperacionalExpedicaoController extends Controller
                 'fim' => 'carregamento_finalizado_em',
             ],
         };
+    }
+
+    private function dataOperacionalValida($data): bool
+    {
+        return $data && Carbon::parse($data)->gte(Demanda::DATA_OPERACIONAL_MINIMA);
+    }
+
+    private function whereDemandaSeparada($query): void
+    {
+        $query->selectRaw('1')
+            ->from('_tb_demanda as d')
+            ->whereColumn('d.fo', '_tb_expedicao_programacoes.fo')
+            ->whereNotNull('d.separacao_finalizada_em')
+            ->where('d.separacao_finalizada_em', '>=', Demanda::DATA_OPERACIONAL_MINIMA);
+    }
+
+    private function whereDemandaNaoExpedida($query): void
+    {
+        $query->selectRaw('1')
+            ->from('_tb_demanda as d')
+            ->whereColumn('d.fo', '_tb_expedicao_programacoes.fo')
+            ->where(function ($query) {
+                $query->whereNull('d.carregamento_finalizado_em')
+                    ->orWhere('d.carregamento_finalizado_em', '<', Demanda::DATA_OPERACIONAL_MINIMA);
+            });
+    }
+
+    private function whereDemandaExpedida($query): void
+    {
+        $query->selectRaw('1')
+            ->from('_tb_demanda as d')
+            ->whereColumn('d.fo', '_tb_expedicao_programacoes.fo')
+            ->whereNotNull('d.carregamento_finalizado_em')
+            ->where('d.carregamento_finalizado_em', '>=', Demanda::DATA_OPERACIONAL_MINIMA);
+    }
+
+    private function montarResumoFila($baseProgramacoes): array
+    {
+        $emFila = (clone $baseProgramacoes)
+            ->whereExists(fn ($query) => $this->whereDemandaNaoExpedida($query))
+            ->count();
+
+        $aguardandoConferencia = (clone $baseProgramacoes)
+            ->whereExists(fn ($query) => $this->whereDemandaNaoExpedida($query))
+            ->whereExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('_tb_demanda as d')
+                    ->whereColumn('d.fo', '_tb_expedicao_programacoes.fo')
+                    ->where(function ($query) {
+                        $query->whereNull('d.conferencia_iniciada_em')
+                            ->orWhere('d.conferencia_iniciada_em', '<', Demanda::DATA_OPERACIONAL_MINIMA);
+                    })
+                    ->where(function ($query) {
+                        $query->whereNull('d.conferencia_finalizada_em')
+                            ->orWhere('d.conferencia_finalizada_em', '<', Demanda::DATA_OPERACIONAL_MINIMA);
+                    });
+            })
+            ->count();
+
+        $conferindo = (clone $baseProgramacoes)
+            ->whereExists(fn ($query) => $this->whereDemandaNaoExpedida($query))
+            ->whereExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('_tb_demanda as d')
+                    ->whereColumn('d.fo', '_tb_expedicao_programacoes.fo')
+                    ->whereNotNull('d.conferencia_iniciada_em')
+                    ->where('d.conferencia_iniciada_em', '>=', Demanda::DATA_OPERACIONAL_MINIMA)
+                    ->where(function ($query) {
+                        $query->whereNull('d.conferencia_finalizada_em')
+                            ->orWhere('d.conferencia_finalizada_em', '<', Demanda::DATA_OPERACIONAL_MINIMA);
+                    });
+            })
+            ->count();
+
+        $aguardandoCarregamento = (clone $baseProgramacoes)
+            ->whereExists(fn ($query) => $this->whereDemandaNaoExpedida($query))
+            ->whereExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('_tb_demanda as d')
+                    ->whereColumn('d.fo', '_tb_expedicao_programacoes.fo')
+                    ->whereNotNull('d.conferencia_finalizada_em')
+                    ->where('d.conferencia_finalizada_em', '>=', Demanda::DATA_OPERACIONAL_MINIMA)
+                    ->where(function ($query) {
+                        $query->whereNull('d.carregamento_iniciado_em')
+                            ->orWhere('d.carregamento_iniciado_em', '<', Demanda::DATA_OPERACIONAL_MINIMA);
+                    });
+            })
+            ->count();
+
+        $carregando = (clone $baseProgramacoes)
+            ->whereExists(fn ($query) => $this->whereDemandaNaoExpedida($query))
+            ->whereExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('_tb_demanda as d')
+                    ->whereColumn('d.fo', '_tb_expedicao_programacoes.fo')
+                    ->whereNotNull('d.carregamento_iniciado_em')
+                    ->where('d.carregamento_iniciado_em', '>=', Demanda::DATA_OPERACIONAL_MINIMA)
+                    ->where(function ($query) {
+                        $query->whereNull('d.carregamento_finalizado_em')
+                            ->orWhere('d.carregamento_finalizado_em', '<', Demanda::DATA_OPERACIONAL_MINIMA);
+                    });
+            })
+            ->count();
+
+        $finalizadas = (clone $baseProgramacoes)
+            ->whereExists(fn ($query) => $this->whereDemandaExpedida($query))
+            ->count();
+
+        return [
+            'em_fila' => $emFila,
+            'aguardando_conferencia' => $aguardandoConferencia,
+            'conferindo' => $conferindo,
+            'aguardando_carregamento' => $aguardandoCarregamento,
+            'carregando' => $carregando,
+            'finalizadas' => $finalizadas,
+        ];
     }
 }

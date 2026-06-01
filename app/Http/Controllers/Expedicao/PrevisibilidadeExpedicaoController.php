@@ -4,19 +4,26 @@ namespace App\Http\Controllers\Expedicao;
 
 use App\Http\Controllers\Controller;
 use App\Models\Expedicao\ExpedicaoProgramacao;
+use App\Services\Expedicao\CapacidadeOperacionalService;
 use App\Services\Expedicao\PrevisaoExpedicaoService;
 use App\Services\Expedicao\ValidacaoOperacionalService;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class PrevisibilidadeExpedicaoController extends Controller
 {
-    public function index()
+    private const DATA_OPERACIONAL_MINIMA = '2000-01-01 00:00:00';
+
+    public function index(Request $request)
     {
         $validacaoService = new ValidacaoOperacionalService();
+        $tipoDemanda = strtoupper((string) $request->input('tipo_demanda', 'TODAS'));
+        $tipoDemanda = in_array($tipoDemanda, ExpedicaoProgramacao::tiposDemanda(), true) ? $tipoDemanda : 'TODAS';
 
         $programacoes = ExpedicaoProgramacao::with('ultimaPrevisao')
+            ->when($tipoDemanda !== 'TODAS', fn ($query) => $query->where('tipo_demanda', $tipoDemanda))
             ->orderByRaw('agenda_entrega_em IS NULL')
             ->orderBy('agenda_entrega_em')
             ->get();
@@ -64,8 +71,8 @@ class PrevisibilidadeExpedicaoController extends Controller
                     'previsto' => optional($programacao->ultimaPrevisao)->tempo_separacao_min,
                     'inicio_previsto' => optional($programacao->ultimaPrevisao)->previsao_inicio_separacao,
                     'prazo' => optional($programacao->ultimaPrevisao)->previsao_inicio_conferencia,
-                    'inicio' => $demanda->separacao_iniciada_em ?? null,
-                    'fim' => $demanda->separacao_finalizada_em ?? null,
+                    'inicio' => $this->dataOperacionalValida($demanda->separacao_iniciada_em ?? null),
+                    'fim' => $this->dataOperacionalValida($demanda->separacao_finalizada_em ?? null),
                     'limite' => 480, // 8h
                 ],
 
@@ -74,8 +81,8 @@ class PrevisibilidadeExpedicaoController extends Controller
                     'previsto' => optional($programacao->ultimaPrevisao)->tempo_conferencia_min,
                     'inicio_previsto' => optional($programacao->ultimaPrevisao)->previsao_inicio_conferencia,
                     'prazo' => optional($programacao->ultimaPrevisao)->previsao_inicio_carregamento,
-                    'inicio' => $demanda->conferencia_iniciada_em ?? null,
-                    'fim' => $demanda->conferencia_finalizada_em ?? null,
+                    'inicio' => $this->dataOperacionalValida($demanda->conferencia_iniciada_em ?? null),
+                    'fim' => $this->dataOperacionalValida($demanda->conferencia_finalizada_em ?? null),
                     'limite' => 240, // 4h
                 ],
 
@@ -84,8 +91,8 @@ class PrevisibilidadeExpedicaoController extends Controller
                     'previsto' => optional($programacao->ultimaPrevisao)->tempo_carregamento_min,
                     'inicio_previsto' => optional($programacao->ultimaPrevisao)->previsao_inicio_carregamento,
                     'prazo' => optional($programacao->ultimaPrevisao)->previsao_saida_caminhao,
-                    'inicio' => $demanda->carregamento_iniciado_em ?? null,
-                    'fim' => $demanda->carregamento_finalizado_em ?? null,
+                    'inicio' => $this->dataOperacionalValida($demanda->carregamento_iniciado_em ?? null),
+                    'fim' => $this->dataOperacionalValida($demanda->carregamento_finalizado_em ?? null),
                     'limite' => 240, // 4h
                 ],
             ];
@@ -218,7 +225,8 @@ class PrevisibilidadeExpedicaoController extends Controller
             $programacao->agenda_vencida = $programacao->agenda_entrega_em
                 ? $programacao->agenda_entrega_em->isPast()
                 : false;
-            $programacao->saida_concluida = ! empty($demanda->carregamento_finalizado_em);
+            $programacao->carregamento_concluido = (bool) $this->dataOperacionalValida($demanda->carregamento_finalizado_em ?? null);
+            $programacao->saida_concluida = (bool) $this->dataOperacionalValida($demanda->saida_veiculo_em ?? null);
 
             /*
             |--------------------------------------------------------------------------
@@ -306,12 +314,29 @@ class PrevisibilidadeExpedicaoController extends Controller
             return $programacao;
         });
 
+        $resumoFinalizadas = $this->montarResumoFinalizadas($programacoes);
+        $programacoes = $programacoes
+            ->reject(fn ($programacao) => (bool) $programacao->carregamento_concluido)
+            ->values();
+
         $resumoOperacional = $this->montarResumoOperacional($programacoes);
+        $capacidadeOperacional = app(CapacidadeOperacionalService::class)->analisar(now());
 
         return view(
             'expedicao.previsibilidade.index',
-            compact('programacoes', 'resumoOperacional')
+            compact('programacoes', 'resumoOperacional', 'capacidadeOperacional', 'tipoDemanda', 'resumoFinalizadas')
         );
+    }
+
+    private function dataOperacionalValida($data): ?Carbon
+    {
+        if (empty($data)) {
+            return null;
+        }
+
+        $carbon = Carbon::parse($data);
+
+        return $carbon->gte(self::DATA_OPERACIONAL_MINIMA) ? $carbon : null;
     }
 
     private function previsaoPrecisaRecalculo(ExpedicaoProgramacao $programacao): bool
@@ -351,6 +376,19 @@ class PrevisibilidadeExpedicaoController extends Controller
     private function montarResumoOperacional($programacoes): array
     {
         $total = $programacoes->count();
+        $programadas = $programacoes->where('tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA);
+        $oportunidades = $programacoes->where('tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE);
+        $executadas = fn ($itens) => $itens->filter(fn ($programacao) => (bool) $programacao->saida_concluida)->count();
+        $riscoStatus = ['ATRASADO', 'ATENCAO', 'SEM_EXPLOSAO', 'SEM_ROTA', 'SEM_CRITERIO', 'ANOMALIA_OPERACIONAL'];
+
+        $programadasExecutadas = $executadas($programadas);
+        $oportunidadesExecutadas = $executadas($oportunidades);
+        $programadasRisco = $programadas
+            ->filter(fn ($programacao) => in_array($programacao->status_operacional, $riscoStatus, true))
+            ->count();
+        $oportunidadesRisco = $oportunidades
+            ->filter(fn ($programacao) => in_array($programacao->status_operacional, $riscoStatus, true))
+            ->count();
 
         $countEtapa = function (string $etapa) use ($programacoes): int {
             return $programacoes
@@ -364,50 +402,43 @@ class PrevisibilidadeExpedicaoController extends Controller
 
         $cards = [
             [
+                'titulo' => 'Demanda Programada',
+                'valor' => $programadas->count(),
+                'percentual' => $this->percentualResumo($programadasExecutadas, $programadas->count()),
+                'detalhe' => $programadasExecutadas . ' executadas | ' . max(0, $programadas->count() - $programadasExecutadas) . ' pendentes',
+                'icone' => 'mdi-calendar-check-outline',
+                'classe' => 'neutral',
+            ],
+            [
+                'titulo' => 'Oportunidades',
+                'valor' => $oportunidades->count(),
+                'percentual' => $this->percentualResumo($oportunidadesExecutadas, $oportunidades->count()),
+                'detalhe' => $oportunidadesExecutadas . ' executadas | ganho operacional',
+                'icone' => 'mdi-trending-up',
+                'classe' => 'ok',
+            ],
+            [
+                'titulo' => 'Total Operado',
+                'valor' => $programadasExecutadas + $oportunidadesExecutadas,
+                'percentual' => $this->percentualResumo($programadasExecutadas + $oportunidadesExecutadas, $total),
+                'detalhe' => $programadasExecutadas . ' programadas | ' . $oportunidadesExecutadas . ' oportunidades',
+                'icone' => 'mdi-truck-check-outline',
+                'classe' => 'ok',
+            ],
+            [
+                'titulo' => 'Risco Operacional',
+                'valor' => $programadasRisco + $oportunidadesRisco,
+                'percentual' => $this->percentualResumo($programadasRisco, max(1, $programadas->count())),
+                'detalhe' => $programadasRisco . ' programadas | ' . $oportunidadesRisco . ' oportunidades',
+                'icone' => 'mdi-alert-decagram-outline',
+                'classe' => ($programadasRisco + $oportunidadesRisco) > 0 ? 'warning' : 'neutral',
+            ],
+            [
                 'titulo' => 'FO / DT',
                 'valor' => $total,
                 'percentual' => $this->percentualResumo($total, $total),
                 'detalhe' => 'Programações exibidas',
                 'icone' => 'mdi-format-list-numbered',
-                'classe' => 'neutral',
-            ],
-            [
-                'titulo' => 'Destinos',
-                'valor' => $programacoes
-                    ->map(fn ($programacao) => trim(($programacao->cidade_destino ?? '-') . '/' . ($programacao->uf_destino ?? '-')))
-                    ->unique()
-                    ->count(),
-                'percentual' => $this->percentualResumo(
-                    $programacoes
-                        ->map(fn ($programacao) => trim(($programacao->cidade_destino ?? '-') . '/' . ($programacao->uf_destino ?? '-')))
-                        ->unique()
-                        ->count(),
-                    $total
-                ),
-                'detalhe' => 'Destinos únicos',
-                'icone' => 'mdi-map-marker-radius-outline',
-                'classe' => 'neutral',
-            ],
-            [
-                'titulo' => 'Agenda',
-                'valor' => $programacoes->filter(fn ($programacao) => $programacao->agenda_entrega_em !== null)->count(),
-                'percentual' => $this->percentualResumo(
-                    $programacoes->filter(fn ($programacao) => $programacao->agenda_entrega_em !== null)->count(),
-                    $total
-                ),
-                'detalhe' => 'Com agenda informada',
-                'icone' => 'mdi-calendar-clock',
-                'classe' => 'neutral',
-            ],
-            [
-                'titulo' => 'Tipo',
-                'valor' => $programacoes->filter(fn ($programacao) => filled($programacao->tipo_carga))->count(),
-                'percentual' => $this->percentualResumo(
-                    $programacoes->filter(fn ($programacao) => filled($programacao->tipo_carga))->count(),
-                    $total
-                ),
-                'detalhe' => $programacoes->pluck('tipo_carga')->filter()->unique()->count() . ' tipos de carga',
-                'icone' => 'mdi-package-variant-closed',
                 'classe' => 'neutral',
             ],
             [
@@ -488,6 +519,52 @@ class PrevisibilidadeExpedicaoController extends Controller
         return [
             'total' => $total,
             'cards' => $cards,
+        ];
+    }
+
+    private function montarResumoFinalizadas($programacoes): array
+    {
+        $carregadas = $programacoes->filter(fn ($programacao) => (bool) $programacao->carregamento_concluido);
+        $aguardandoSaida = $carregadas->reject(fn ($programacao) => (bool) $programacao->saida_concluida);
+        $comSaida = $carregadas->filter(fn ($programacao) => (bool) $programacao->saida_concluida);
+
+        $mapItem = fn ($programacao, string $campoData) => [
+                'dt' => $programacao->dt_sap ?: $programacao->fo,
+                'fo' => $programacao->fo,
+                'destino' => trim(($programacao->cidade_destino ?? '-') . '/' . ($programacao->uf_destino ?? '-'), '/'),
+                'tipo' => $programacao->tipo_demanda_label,
+                'finalizada_em' => $this->dataOperacionalValida($programacao->demanda?->{$campoData} ?? null)?->format('H:i'),
+            ];
+
+        $itensCarregadas = $aguardandoSaida
+            ->sortByDesc(fn ($programacao) => $programacao->demanda?->carregamento_finalizado_em)
+            ->take(18)
+            ->map(fn ($programacao) => $mapItem($programacao, 'carregamento_finalizado_em'))
+            ->values();
+
+        $itensComSaida = $comSaida
+            ->sortByDesc(fn ($programacao) => $programacao->demanda?->saida_veiculo_em)
+            ->take(18)
+            ->map(fn ($programacao) => $mapItem($programacao, 'saida_veiculo_em'))
+            ->values();
+
+        return [
+            'total' => $carregadas->count(),
+            'programadas' => $carregadas->where('tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA)->count(),
+            'oportunidades' => $carregadas->where('tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE)->count(),
+            'ativas' => max(0, $programacoes->count() - $carregadas->count()),
+            'carregadas' => [
+                'total' => $aguardandoSaida->count(),
+                'programadas' => $aguardandoSaida->where('tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA)->count(),
+                'oportunidades' => $aguardandoSaida->where('tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE)->count(),
+                'itens' => $itensCarregadas,
+            ],
+            'com_saida' => [
+                'total' => $comSaida->count(),
+                'programadas' => $comSaida->where('tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA)->count(),
+                'oportunidades' => $comSaida->where('tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE)->count(),
+                'itens' => $itensComSaida,
+            ],
         ];
     }
 

@@ -175,6 +175,24 @@
                             </div>
                         </div>
 
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                                <label for="tipo_demanda" class="form-label prog-muted">Tipo de demanda</label>
+                                <select name="tipo_demanda" id="tipo_demanda" class="form-select">
+                                    <option value="PROGRAMADA" @selected(old('tipo_demanda', 'PROGRAMADA') === 'PROGRAMADA')>Programada</option>
+                                    <option value="OPORTUNIDADE" @selected(old('tipo_demanda') === 'OPORTUNIDADE')>Oportunidade</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="origem_demanda" class="form-label prog-muted">Origem</label>
+                                <select name="origem_demanda" id="origem_demanda" class="form-select">
+                                    <option value="PLANILHA_MANHA" @selected(old('origem_demanda', 'PLANILHA_MANHA') === 'PLANILHA_MANHA')>Planilha manhã</option>
+                                    <option value="IMPORTACAO_OPORTUNIDADE" @selected(old('origem_demanda') === 'IMPORTACAO_OPORTUNIDADE')>Importação oportunidade</option>
+                                    <option value="INCLUSAO_MANUAL" @selected(old('origem_demanda') === 'INCLUSAO_MANUAL')>Inclusão manual</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="mdi mdi-upload me-1"></i> Importar Programação
                         </button>
@@ -220,9 +238,18 @@
                         <div class="prog-stat"><strong>{{ $resumo['ignoradas'] ?? 0 }}</strong><span>Ignoradas</span></div>
                     </div>
                     <div class="col-6 col-md">
+                        <div class="prog-stat"><strong>{{ $resumo['bloqueadas_programadas'] ?? 0 }}</strong><span>Já programadas</span></div>
+                    </div>
+                    <div class="col-6 col-md">
                         <div class="prog-stat"><strong>{{ $resumo['erros'] ?? 0 }}</strong><span>Erros</span></div>
                     </div>
                 </div>
+
+                @if (($resumo['bloqueadas_programadas'] ?? 0) > 0)
+                    <div class="alert alert-warning border-0 small mb-3">
+                        {{ $resumo['bloqueadas_programadas'] }} FO(s) já estavam como programadas e não foram reclassificadas como oportunidade.
+                    </div>
+                @endif
 
                 @if (! empty($resumo['colunas_detectadas']))
                     <div class="mb-3">

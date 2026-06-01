@@ -11,6 +11,8 @@ use App\Http\Controllers\KitProgramarController;
 use App\Http\Controllers\Expedicao\ApontamentoOperacionalExpedicaoController;
 use App\Http\Controllers\Expedicao\ImportacaoProgramacaoExpedicaoController;
 use App\Http\Controllers\Expedicao\PrevisibilidadeExpedicaoController;
+use App\Http\Controllers\Expedicao\SaidaVeiculoExpedicaoController;
+use App\Http\Controllers\Expedicao\TimelineDtExpedicaoController;
 
 
 use App\Http\Controllers\{
@@ -69,6 +71,24 @@ Route::middleware(['auth'])->prefix('expedicao')->name('expedicao.')->group(func
     Route::post('/programacoes/{fo}/apontamento-operacional', [ApontamentoOperacionalExpedicaoController::class, 'store'])
         ->middleware('demanda.perfil:operacional')
         ->name('programacoes.apontamento-operacional.store');
+    Route::get('/saida-veiculos', [SaidaVeiculoExpedicaoController::class, 'index'])
+        ->middleware('demanda.perfil:operacional')
+        ->name('saida-veiculos.index');
+    Route::get('/saida-veiculos/{fo}', [SaidaVeiculoExpedicaoController::class, 'show'])
+        ->middleware('demanda.perfil:operacional')
+        ->name('saida-veiculos.show');
+    Route::get('/timeline-dts', [TimelineDtExpedicaoController::class, 'index'])
+        ->middleware('demanda.perfil:operacional')
+        ->name('timeline-dts.index');
+    Route::get('/timeline-dts/{fo}', [TimelineDtExpedicaoController::class, 'show'])
+        ->middleware('demanda.perfil:operacional')
+        ->name('timeline-dts.show');
+    Route::post('/programacoes/{fo}/saida-veiculo', [SaidaVeiculoExpedicaoController::class, 'store'])
+        ->middleware('demanda.perfil:operacional')
+        ->name('programacoes.saida-veiculo.store');
+    Route::patch('/programacoes/{fo}/saida-veiculo', [SaidaVeiculoExpedicaoController::class, 'update'])
+        ->middleware('demanda.perfil:operacional')
+        ->name('programacoes.saida-veiculo.update');
 });
 
 Route::get('/usuarios/buscar', [UserController::class, 'buscarSeparadores'])

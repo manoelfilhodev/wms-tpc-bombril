@@ -8,8 +8,12 @@ use App\Models\DemandaDistribuicao;
 use App\Models\DemandaItem;
 use App\Models\User;
 use App\Exports\DemandasExport;
+use App\Exports\OperationalReportExport;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\DemandaHistory;
+use App\Models\Expedicao\ExpedicaoProgramacao;
+use App\Services\Expedicao\CapacidadeOperacionalService;
 use App\Services\DashboardService;
 use App\Services\SystemLogService;
 use Illuminate\Support\Facades\DB;
@@ -76,14 +80,17 @@ class DemandaController extends Controller
                     } elseif ($status === 'A_SEPARAR') {
                         $statusQuery->orWhere(function ($q) {
                             $q->whereNull('separacao_finalizada_em')
-                                ->whereNull('separacao_iniciada_em')
+                                ->where(function ($inicio) {
+                                    $inicio->whereNull('separacao_iniciada_em')
+                                        ->orWhere('separacao_iniciada_em', '<', Demanda::DATA_OPERACIONAL_MINIMA);
+                                })
                                 ->whereDoesntHave('distribuicoes');
                         });
                     } elseif ($status === 'SEPARANDO') {
                         $statusQuery->orWhere(function ($q) {
                             $q->whereNull('separacao_finalizada_em')
                                 ->where(function ($emSeparacao) {
-                                    $emSeparacao->whereNotNull('separacao_iniciada_em')
+                                    $emSeparacao->where('separacao_iniciada_em', '>=', Demanda::DATA_OPERACIONAL_MINIMA)
                                         ->orWhereHas('distribuicoes');
                                 });
                         });
@@ -699,7 +706,7 @@ class DemandaController extends Controller
                 }
             }
 
-            if (!$demanda->separacao_iniciada_em) {
+            if (! $this->separacaoIniciadaValida($demanda)) {
                 $demanda->update([
                     'separacao_iniciada_em' => now(),
                     'status' => 'SEPARANDO',
@@ -892,7 +899,7 @@ class DemandaController extends Controller
         if (! $demanda->possui_sobra) {
             return back()->with('error', "A DT {$demanda->fo} não possui sobra para separação.");
         }
-        if ($demanda->separacao_iniciada_em && ! $demanda->separacao_finalizada_em) {
+        if ($this->separacaoIniciadaValida($demanda) && ! $demanda->separacao_finalizada_em) {
             return back()->with('error', "A DT {$demanda->fo} já está em separação.");
         }
 
@@ -932,7 +939,7 @@ class DemandaController extends Controller
         ]);
 
         $demanda = Demanda::findOrFail($id);
-        if (! $demanda->separacao_iniciada_em) {
+        if (! $this->separacaoIniciadaValida($demanda)) {
             $totalDistribuido = (int) $demanda->distribuicoes()->sum('quantidade_pecas');
             if ($totalDistribuido > 0) {
                 $primeiraDistribuicao = $demanda->distribuicoes()->orderBy('created_at')->first();
@@ -961,6 +968,15 @@ class DemandaController extends Controller
         ]);
 
         return back()->with('success', "Separação da DT {$demanda->fo} finalizada como {$request->resultado}.");
+    }
+
+    private function separacaoIniciadaValida(Demanda $demanda): bool
+    {
+        if (! $demanda->separacao_iniciada_em) {
+            return false;
+        }
+
+        return Carbon::parse($demanda->separacao_iniciada_em)->gte(Demanda::DATA_OPERACIONAL_MINIMA);
     }
 
     public function dashboardOperacional()
@@ -1326,13 +1342,16 @@ class DemandaController extends Controller
         ];
     }
 
-    public function relatoriosOperacional()
+    public function relatoriosOperacional(Request $request)
     {
         if (auth()->user()?->tipo === 'operador') {
             return redirect()->route('painel.operador');
         }
 
         $base = Demanda::query()->where('possui_sobra', true);
+        $this->aplicarPeriodoRelatorioEloquent($base, $request, 'created_at');
+        $this->aplicarFiltroTipoDemandaEloquent($base, $this->normalizarTipoDemandaRelatorio($request->input('tipo_demanda', 'TODAS')));
+
         $total = (clone $base)->count();
         $parcial = (clone $base)->where('separacao_resultado', 'PARCIAL')->count();
         $completa = (clone $base)->where('separacao_resultado', 'COMPLETA')->count();
@@ -1350,7 +1369,406 @@ class DemandaController extends Controller
             'completa' => $completa,
             'abertas' => $abertas,
             'tempoMedioMin' => $tempoMedioMin ? round((float) $tempoMedioMin, 1) : null,
+            'relatoriosExportaveis' => $this->relatoriosExportaveisOperacionais(),
+            'filtros' => [
+                'data_inicio' => $request->input('data_inicio'),
+                'data_fim' => $request->input('data_fim'),
+                'tipo_demanda' => $this->normalizarTipoDemandaRelatorio($request->input('tipo_demanda', 'TODAS')),
+            ],
         ]);
+    }
+
+    public function exportRelatorioOperacional(Request $request, string $tipo, string $formato)
+    {
+        if (auth()->user()?->tipo === 'operador') {
+            abort(403);
+        }
+
+        $formato = strtolower($formato);
+        if (! in_array($formato, ['excel', 'pdf'], true)) {
+            abort(404);
+        }
+
+        $relatorio = $this->montarRelatorioOperacional($request, $tipo);
+        $filename = $relatorio['slug'] . '_' . now()->format('Ymd_His');
+
+        if ($formato === 'excel') {
+            return Excel::download(
+                new OperationalReportExport($relatorio['rows'], $relatorio['headings']),
+                $filename . '.xlsx'
+            );
+        }
+
+        $pdf = Pdf::loadView('demandas.relatorios_export_pdf', $relatorio)
+            ->setPaper('a4', 'landscape');
+
+        return $pdf->download($filename . '.pdf');
+    }
+
+    private function relatoriosExportaveisOperacionais(): array
+    {
+        return [
+            'ciclo-expedicao' => [
+                'titulo' => 'Ciclo completo da DT',
+                'descricao' => 'Importação, separação, conferência, carregamento, saída do veículo e tempos por etapa.',
+                'status' => 'Disponível',
+            ],
+            'saida-veiculos' => [
+                'titulo' => 'Saída de veículos',
+                'descricao' => 'DTs carregadas, horário de saída, responsável, observação e tempo até liberação.',
+                'status' => 'Disponível',
+            ],
+            'produtividade-separador' => [
+                'titulo' => 'Produtividade por separador',
+                'descricao' => 'Peças, SKUs, DTs, tempo médio e parcialidade por operador.',
+                'status' => 'Disponível',
+            ],
+            'dts-picking' => [
+                'titulo' => 'Relatório de DTs Picking',
+                'descricao' => 'Rastreabilidade das DTs de picking com status de separação e expedição.',
+                'status' => 'Disponível',
+            ],
+            'curva-abc-skus' => [
+                'titulo' => 'Curva ABC de SKUs',
+                'descricao' => 'SKUs por volume de sobra/picking, participação, acumulado e classe A/B/C.',
+                'status' => 'Disponível',
+            ],
+            'gargalos-operacionais' => [
+                'titulo' => 'Gargalos operacionais',
+                'descricao' => 'DTs com maior tempo parado ou execução mais demorada no fluxo.',
+                'status' => 'Disponível',
+            ],
+            'sla-separacao' => [
+                'titulo' => 'SLA de separação',
+                'descricao' => 'Finalização da separação, backlog e tempo médio por período.',
+                'status' => 'Disponível',
+            ],
+        ];
+    }
+
+    private function montarRelatorioOperacional(Request $request, string $tipo): array
+    {
+        $relatorios = $this->relatoriosExportaveisOperacionais();
+        abort_unless(isset($relatorios[$tipo]), 404);
+
+        $tipoDemanda = $this->normalizarTipoDemandaRelatorio($request->input('tipo_demanda', 'TODAS'));
+
+        return match ($tipo) {
+            'ciclo-expedicao' => $this->relatorioCicloExpedicao($request, $tipoDemanda),
+            'saida-veiculos' => $this->relatorioSaidaVeiculos($request, $tipoDemanda),
+            'produtividade-separador' => $this->relatorioProdutividadeSeparador($request, $tipoDemanda),
+            'dts-picking' => $this->relatorioDtsPicking($request, $tipoDemanda),
+            'curva-abc-skus' => $this->relatorioCurvaAbcSkus($request, $tipoDemanda),
+            'gargalos-operacionais' => $this->relatorioGargalosOperacionais($request, $tipoDemanda),
+            'sla-separacao' => $this->relatorioSlaSeparacao($request, $tipoDemanda),
+        };
+    }
+
+    private function relatorioCicloExpedicao(Request $request, string $tipoDemanda): array
+    {
+        $query = DB::table('_tb_demanda as d')
+            ->leftJoin('_tb_usuarios as u_saida', 'u_saida.id_user', '=', 'd.saida_veiculo_usuario_id')
+            ->where('d.possui_sobra', true);
+        $this->aplicarPeriodoRelatorioSql($query, $request, 'd.created_at');
+        $this->aplicarFiltroTipoDemandaSql($query, $tipoDemanda, 'd');
+
+        $rows = $query
+            ->select([
+                'd.fo',
+                'd.cliente',
+                'd.transportadora',
+                'd.created_at',
+                'd.separacao_iniciada_em',
+                'd.separacao_finalizada_em',
+                'd.separacao_resultado',
+                'd.conferencia_iniciada_em',
+                'd.conferencia_finalizada_em',
+                'd.carregamento_iniciado_em',
+                'd.carregamento_finalizado_em',
+                'd.saida_veiculo_em',
+                'u_saida.nome as saida_responsavel',
+            ])
+            ->selectRaw($this->tipoDemandaSubquery('d') . ' as tipo_demanda')
+            ->orderByDesc('d.created_at')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'DT' => $item->fo,
+                    'Tipo demanda' => $item->tipo_demanda ?: 'PROGRAMADA',
+                    'Cliente' => $item->cliente ?: '-',
+                    'Transportadora' => $item->transportadora ?: '-',
+                    'Importação' => $this->formatarDataHoraRelatorio($item->created_at),
+                    'Início separação' => $this->formatarDataHoraRelatorio($item->separacao_iniciada_em),
+                    'Fim separação' => $this->formatarDataHoraRelatorio($item->separacao_finalizada_em),
+                    'Resultado separação' => $item->separacao_resultado ?: '-',
+                    'Tempo separação' => $this->formatarIntervaloRelatorio($item->separacao_iniciada_em, $item->separacao_finalizada_em),
+                    'Início conferência' => $this->formatarDataHoraRelatorio($item->conferencia_iniciada_em),
+                    'Fim conferência' => $this->formatarDataHoraRelatorio($item->conferencia_finalizada_em),
+                    'Tempo conferência' => $this->formatarIntervaloRelatorio($item->conferencia_iniciada_em, $item->conferencia_finalizada_em),
+                    'Início carregamento' => $this->formatarDataHoraRelatorio($item->carregamento_iniciado_em),
+                    'Fim carregamento' => $this->formatarDataHoraRelatorio($item->carregamento_finalizado_em),
+                    'Tempo carregamento' => $this->formatarIntervaloRelatorio($item->carregamento_iniciado_em, $item->carregamento_finalizado_em),
+                    'Saída veículo' => $this->formatarDataHoraRelatorio($item->saida_veiculo_em),
+                    'Responsável saída' => $item->saida_responsavel ?: '-',
+                    'Status ciclo' => $this->statusCicloRelatorio($item),
+                ];
+            });
+
+        return $this->payloadRelatorio('ciclo-expedicao', 'Ciclo completo da DT', $rows, $request, $tipoDemanda);
+    }
+
+    private function relatorioSaidaVeiculos(Request $request, string $tipoDemanda): array
+    {
+        $query = DB::table('_tb_demanda as d')
+            ->leftJoin('_tb_usuarios as u_saida', 'u_saida.id_user', '=', 'd.saida_veiculo_usuario_id')
+            ->where('d.possui_sobra', true)
+            ->whereNotNull('d.carregamento_finalizado_em');
+        $this->aplicarPeriodoSaidaVeiculo($query, $request);
+        $this->aplicarFiltroTipoDemandaSql($query, $tipoDemanda, 'd');
+
+        $rows = $query
+            ->select([
+                'd.fo',
+                'd.cliente',
+                'd.transportadora',
+                'd.carregamento_finalizado_em',
+                'd.saida_veiculo_em',
+                'd.saida_veiculo_observacao',
+                'u_saida.nome as saida_responsavel',
+            ])
+            ->selectRaw($this->tipoDemandaSubquery('d') . ' as tipo_demanda')
+            ->orderByRaw('COALESCE(d.saida_veiculo_em, d.carregamento_finalizado_em) desc')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'DT' => $item->fo,
+                    'Tipo demanda' => $item->tipo_demanda ?: 'PROGRAMADA',
+                    'Cliente' => $item->cliente ?: '-',
+                    'Transportadora' => $item->transportadora ?: '-',
+                    'Fim carregamento' => $this->formatarDataHoraRelatorio($item->carregamento_finalizado_em),
+                    'Saída veículo' => $this->formatarDataHoraRelatorio($item->saida_veiculo_em),
+                    'Tempo carregado até saída' => $this->formatarIntervaloRelatorio($item->carregamento_finalizado_em, $item->saida_veiculo_em),
+                    'Responsável' => $item->saida_responsavel ?: '-',
+                    'Observação' => $item->saida_veiculo_observacao ?: '-',
+                    'Status' => $item->saida_veiculo_em ? 'CICLO FECHADO' : 'AGUARDANDO SAÍDA',
+                ];
+            });
+
+        return $this->payloadRelatorio('saida-veiculos', 'Saída de veículos', $rows, $request, $tipoDemanda);
+    }
+
+    private function relatorioProdutividadeSeparador(Request $request, string $tipoDemanda): array
+    {
+        $query = DB::table('_tb_demanda_distribuicoes as dd')
+            ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
+            ->where('d.possui_sobra', true)
+            ->whereNotNull('dd.finalizado_em');
+        $this->aplicarPeriodoRelatorioSql($query, $request, 'dd.finalizado_em');
+        $this->aplicarFiltroTipoDemandaSql($query, $tipoDemanda, 'd');
+
+        $rows = $query
+            ->selectRaw("COALESCE(NULLIF(TRIM(dd.separador_nome), ''), 'SEM IDENTIFICAÇÃO') as separador")
+            ->selectRaw('COUNT(DISTINCT d.fo) as total_dts')
+            ->selectRaw('SUM(dd.quantidade_pecas) as total_pecas')
+            ->selectRaw('SUM(COALESCE(dd.quantidade_skus, 0)) as total_skus')
+            ->selectRaw('SUM(CASE WHEN dd.resultado = ? THEN 1 ELSE 0 END) as parciais', ['PARCIAL'])
+            ->selectRaw("AVG(" . $this->tempoDiffMinExpr('dd.created_at', 'dd.finalizado_em') . ") as tempo_medio_min")
+            ->selectRaw('MIN(dd.created_at) as primeiro_inicio')
+            ->selectRaw('MAX(dd.finalizado_em) as ultima_finalizacao')
+            ->groupBy('separador')
+            ->orderByDesc('total_pecas')
+            ->get()
+            ->map(function ($item) {
+                $totalDts = max(1, (int) $item->total_dts);
+
+                return [
+                    'Separador' => $item->separador,
+                    'Peças separadas' => (int) $item->total_pecas,
+                    'SKUs separados' => (int) $item->total_skus,
+                    'DTs atendidas' => (int) $item->total_dts,
+                    'Tempo médio' => $this->formatarMinutosRelatorio($item->tempo_medio_min),
+                    'Parciais' => (int) $item->parciais,
+                    '% parcial' => number_format(((int) $item->parciais / $totalDts) * 100, 1, ',', '.') . '%',
+                    'Primeiro início' => $this->formatarDataHoraRelatorio($item->primeiro_inicio),
+                    'Última finalização' => $this->formatarDataHoraRelatorio($item->ultima_finalizacao),
+                ];
+            });
+
+        return $this->payloadRelatorio('produtividade-separador', 'Produtividade por separador', $rows, $request, $tipoDemanda);
+    }
+
+    private function relatorioDtsPicking(Request $request, string $tipoDemanda): array
+    {
+        $query = DB::table('_tb_demanda as d')->where('d.possui_sobra', true);
+        $this->aplicarPeriodoRelatorioSql($query, $request, 'd.created_at');
+        $this->aplicarFiltroTipoDemandaSql($query, $tipoDemanda, 'd');
+
+        $rows = $query
+            ->select([
+                'd.fo',
+                'd.cliente',
+                'd.transportadora',
+                'd.created_at',
+                'd.total_itens',
+                'd.total_itens_com_sobra',
+                'd.separacao_iniciada_em',
+                'd.separacao_finalizada_em',
+                'd.separacao_resultado',
+                'd.conferencia_finalizada_em',
+                'd.carregamento_finalizado_em',
+                'd.saida_veiculo_em',
+            ])
+            ->selectRaw($this->tipoDemandaSubquery('d') . ' as tipo_demanda')
+            ->orderByDesc('d.created_at')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'DT' => $item->fo,
+                    'Tipo demanda' => $item->tipo_demanda ?: 'PROGRAMADA',
+                    'Cliente' => $item->cliente ?: '-',
+                    'Transportadora' => $item->transportadora ?: '-',
+                    'Importação' => $this->formatarDataHoraRelatorio($item->created_at),
+                    'SKUs total' => (int) $item->total_itens,
+                    'SKUs com sobra' => (int) $item->total_itens_com_sobra,
+                    'Início separação' => $this->formatarDataHoraRelatorio($item->separacao_iniciada_em),
+                    'Fim separação' => $this->formatarDataHoraRelatorio($item->separacao_finalizada_em),
+                    'Tempo separação' => $this->formatarIntervaloRelatorio($item->separacao_iniciada_em, $item->separacao_finalizada_em),
+                    'Status separação' => $item->separacao_finalizada_em ? ($item->separacao_resultado ?: 'FINALIZADA') : ($item->separacao_iniciada_em ? 'SEPARANDO' : 'A SEPARAR'),
+                    'Conferência finalizada' => $this->formatarDataHoraRelatorio($item->conferencia_finalizada_em),
+                    'Carregamento finalizado' => $this->formatarDataHoraRelatorio($item->carregamento_finalizado_em),
+                    'Saída veículo' => $this->formatarDataHoraRelatorio($item->saida_veiculo_em),
+                    'Status ciclo' => $this->statusCicloRelatorio($item),
+                ];
+            });
+
+        return $this->payloadRelatorio('dts-picking', 'Relatório de DTs Picking', $rows, $request, $tipoDemanda);
+    }
+
+    private function relatorioCurvaAbcSkus(Request $request, string $tipoDemanda): array
+    {
+        $query = DB::table('_tb_demanda_itens as di')
+            ->join('_tb_demanda as d', 'd.id', '=', 'di.demanda_id')
+            ->where('d.possui_sobra', true)
+            ->where('di.bloqueado', false);
+        $this->aplicarPeriodoRelatorioSql($query, $request, 'd.created_at');
+        $this->aplicarFiltroTipoDemandaSql($query, $tipoDemanda, 'd');
+
+        $dados = $query
+            ->selectRaw('di.sku_normalizado as sku')
+            ->selectRaw('MAX(di.descricao) as descricao')
+            ->selectRaw('MAX(di.unidade_medida) as unidade')
+            ->selectRaw('SUM(di.sobra) as quantidade')
+            ->selectRaw('COUNT(DISTINCT d.fo) as total_dts')
+            ->groupBy('di.sku_normalizado')
+            ->orderByDesc('quantidade')
+            ->get();
+
+        $total = max(0.001, (float) $dados->sum('quantidade'));
+        $acumulado = 0.0;
+        $rows = $dados->map(function ($item) use ($total, &$acumulado) {
+            $quantidade = (float) $item->quantidade;
+            $participacao = ($quantidade / $total) * 100;
+            $acumulado += $participacao;
+
+            return [
+                'SKU' => $item->sku,
+                'Descrição' => $item->descricao ?: '-',
+                'Unidade' => $item->unidade ?: '-',
+                'Qtd total' => number_format($quantidade, 3, ',', '.'),
+                'DTs atendidas' => (int) $item->total_dts,
+                '% participação' => number_format($participacao, 2, ',', '.') . '%',
+                '% acumulado' => number_format($acumulado, 2, ',', '.') . '%',
+                'Classe' => $acumulado <= 80 ? 'A' : ($acumulado <= 95 ? 'B' : 'C'),
+            ];
+        });
+
+        return $this->payloadRelatorio('curva-abc-skus', 'Curva ABC de SKUs', $rows, $request, $tipoDemanda);
+    }
+
+    private function relatorioGargalosOperacionais(Request $request, string $tipoDemanda): array
+    {
+        $query = DB::table('_tb_demanda as d')->where('d.possui_sobra', true);
+        $this->aplicarPeriodoRelatorioSql($query, $request, 'd.created_at');
+        $this->aplicarFiltroTipoDemandaSql($query, $tipoDemanda, 'd');
+
+        $rows = $query
+            ->select([
+                'd.fo',
+                'd.cliente',
+                'd.created_at',
+                'd.separacao_iniciada_em',
+                'd.separacao_finalizada_em',
+                'd.conferencia_iniciada_em',
+                'd.conferencia_finalizada_em',
+                'd.carregamento_iniciado_em',
+                'd.carregamento_finalizado_em',
+                'd.saida_veiculo_em',
+            ])
+            ->selectRaw($this->tipoDemandaSubquery('d') . ' as tipo_demanda')
+            ->orderByDesc('d.created_at')
+            ->get()
+            ->map(function ($item) {
+                $etapas = [
+                    'Separação' => $this->minutosEntreRelatorio($item->separacao_iniciada_em, $item->separacao_finalizada_em),
+                    'Conferência' => $this->minutosEntreRelatorio($item->conferencia_iniciada_em, $item->conferencia_finalizada_em),
+                    'Carregamento' => $this->minutosEntreRelatorio($item->carregamento_iniciado_em, $item->carregamento_finalizado_em),
+                    'Carregado até saída' => $this->minutosEntreRelatorio($item->carregamento_finalizado_em, $item->saida_veiculo_em),
+                ];
+                arsort($etapas);
+                $maiorEtapa = array_key_first($etapas);
+                $maiorTempo = $etapas[$maiorEtapa] ?? null;
+
+                return [
+                    'DT' => $item->fo,
+                    'Tipo demanda' => $item->tipo_demanda ?: 'PROGRAMADA',
+                    'Cliente' => $item->cliente ?: '-',
+                    'Status ciclo' => $this->statusCicloRelatorio($item),
+                    'Maior gargalo' => $maiorTempo !== null ? $maiorEtapa : '-',
+                    'Tempo do gargalo' => $this->formatarMinutosRelatorio($maiorTempo),
+                    'Tempo separação' => $this->formatarMinutosRelatorio($etapas['Separação'] ?? null),
+                    'Tempo conferência' => $this->formatarMinutosRelatorio($etapas['Conferência'] ?? null),
+                    'Tempo carregamento' => $this->formatarMinutosRelatorio($etapas['Carregamento'] ?? null),
+                    'Tempo carregado até saída' => $this->formatarMinutosRelatorio($etapas['Carregado até saída'] ?? null),
+                ];
+            })
+            ->sortByDesc(fn ($item) => $this->minutosTextoParaOrdenacao($item['Tempo do gargalo']))
+            ->values();
+
+        return $this->payloadRelatorio('gargalos-operacionais', 'Gargalos operacionais', $rows, $request, $tipoDemanda);
+    }
+
+    private function relatorioSlaSeparacao(Request $request, string $tipoDemanda): array
+    {
+        $query = DB::table('_tb_demanda as d')->where('d.possui_sobra', true);
+        $this->aplicarPeriodoRelatorioSql($query, $request, 'd.created_at');
+        $this->aplicarFiltroTipoDemandaSql($query, $tipoDemanda, 'd');
+
+        $dateExpr = $this->dateExpr('d.created_at');
+        $rows = $query
+            ->selectRaw("{$dateExpr} as data_operacao")
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw('SUM(CASE WHEN d.separacao_finalizada_em IS NOT NULL THEN 1 ELSE 0 END) as finalizadas')
+            ->selectRaw('SUM(CASE WHEN d.separacao_finalizada_em IS NULL THEN 1 ELSE 0 END) as pendentes')
+            ->selectRaw('SUM(CASE WHEN d.separacao_resultado = ? THEN 1 ELSE 0 END) as parciais', ['PARCIAL'])
+            ->selectRaw("AVG(CASE WHEN d.separacao_iniciada_em IS NOT NULL AND d.separacao_finalizada_em IS NOT NULL THEN " . $this->tempoDiffMinExpr('d.separacao_iniciada_em', 'd.separacao_finalizada_em') . ' ELSE NULL END) as tempo_medio_min')
+            ->groupBy('data_operacao')
+            ->orderByDesc('data_operacao')
+            ->get()
+            ->map(function ($item) {
+                $total = max(1, (int) $item->total);
+
+                return [
+                    'Data operação' => Carbon::parse($item->data_operacao)->format('d/m/Y'),
+                    'DTs picking' => (int) $item->total,
+                    'Finalizadas separação' => (int) $item->finalizadas,
+                    'Pendentes separação' => (int) $item->pendentes,
+                    'Parciais' => (int) $item->parciais,
+                    '% finalização' => number_format(((int) $item->finalizadas / $total) * 100, 1, ',', '.') . '%',
+                    'Tempo médio separação' => $this->formatarMinutosRelatorio($item->tempo_medio_min),
+                ];
+            });
+
+        return $this->payloadRelatorio('sla-separacao', 'SLA de separação', $rows, $request, $tipoDemanda);
     }
 
     public function reportTurno(Request $request)
@@ -1358,6 +1776,7 @@ class DemandaController extends Controller
         $data = $request->input('data', Carbon::today()->toDateString());
         $turno = $this->normalizarTurno($request->input('turno')) ?? $this->turnoAtual();
         $mensagem = trim((string) $request->input('mensagem', 'Bom dia!!!'));
+        $tipoDemanda = $this->normalizarTipoDemandaRelatorio($request->input('tipo_demanda', 'TODAS'));
         $turnos = $this->turnosOperacionais();
         [$inicioTurno, $fimTurno] = $this->intervaloTurno($data, $turno);
 
@@ -1366,13 +1785,22 @@ class DemandaController extends Controller
             ->where('d.possui_sobra', true)
             ->whereNotNull('dd.finalizado_em')
             ->whereBetween('dd.finalizado_em', [$inicioTurno, $fimTurno]);
+        $this->aplicarFiltroTipoDemandaSql($baseDistribuicoes, $tipoDemanda, 'd');
 
         $demandasTurno = Demanda::query()
             ->where('possui_sobra', true)
             ->whereBetween('created_at', [$inicioTurno, $fimTurno]);
+        $this->aplicarFiltroTipoDemandaEloquent($demandasTurno, $tipoDemanda);
         $demandasBacklog = Demanda::query()
             ->where('possui_sobra', true)
             ->where('created_at', '<', $inicioTurno);
+        $this->aplicarFiltroTipoDemandaEloquent($demandasBacklog, $tipoDemanda);
+
+        $separadoTurno = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereNotNull('separacao_finalizada_em')
+            ->whereBetween('separacao_finalizada_em', [$inicioTurno, $fimTurno]);
+        $this->aplicarFiltroTipoDemandaEloquent($separadoTurno, $tipoDemanda);
 
         $resumoStatus = [
             'a_separar' => (clone $demandasTurno)
@@ -1389,11 +1817,7 @@ class DemandaController extends Controller
                 ->whereNotNull('separacao_iniciada_em')
                 ->whereNull('separacao_finalizada_em')
                 ->count(),
-            'separado' => Demanda::query()
-                ->where('possui_sobra', true)
-                ->whereNotNull('separacao_finalizada_em')
-                ->whereBetween('separacao_finalizada_em', [$inicioTurno, $fimTurno])
-                ->count(),
+            'separado' => (clone $separadoTurno)->count(),
             'backlog_separado' => (clone $demandasBacklog)
                 ->whereNotNull('separacao_finalizada_em')
                 ->whereBetween('separacao_finalizada_em', [$inicioTurno, $fimTurno])
@@ -1429,6 +1853,11 @@ class DemandaController extends Controller
                 ->distinct()
                 ->count('d.id'),
         ];
+        $visaoTurnoDemanda = $this->montarResumoTipoDemandaTurno($inicioTurno, $fimTurno);
+        $referenciaCapacidade = now()->betweenIncluded($inicioTurno, $fimTurno)
+            ? now()
+            : $fimTurno->copy();
+        $capacidadeOperacional = app(CapacidadeOperacionalService::class)->analisar($referenciaCapacidade);
 
         return view('demandas.report_turno', [
             'dataSelecionada' => $data,
@@ -1441,6 +1870,9 @@ class DemandaController extends Controller
             'separadores' => $separadores,
             'totais' => $totais,
             'resumoStatus' => $resumoStatus,
+            'tipoDemanda' => $tipoDemanda,
+            'visaoTurnoDemanda' => $visaoTurnoDemanda,
+            'capacidadeOperacional' => $capacidadeOperacional,
         ]);
     }
 
@@ -1450,6 +1882,7 @@ class DemandaController extends Controller
         $dataInicio = $request->input('data_inicio', Carbon::parse($dataFim)->subDays(6)->toDateString());
         $turno = $this->normalizarTurno($request->input('turno'));
         $separador = trim((string) $request->input('separador', ''));
+        $tipoDemanda = $this->normalizarTipoDemandaRelatorio($request->input('tipo_demanda', 'TODAS'));
 
         $inicio = Carbon::parse($dataInicio)->startOfDay();
         $fim = Carbon::parse($dataFim)->endOfDay();
@@ -1481,6 +1914,7 @@ class DemandaController extends Controller
         $baseCriadas = Demanda::query()
             ->where('possui_sobra', true)
             ->whereBetween('created_at', [$inicio, $fim]);
+        $this->aplicarFiltroTipoDemandaEloquent($baseCriadas, $tipoDemanda);
         $aplicarTurno($baseCriadas, 'created_at');
         $aplicarSeparadorDemanda($baseCriadas);
 
@@ -1488,6 +1922,7 @@ class DemandaController extends Controller
             ->where('possui_sobra', true)
             ->whereNotNull('separacao_finalizada_em')
             ->whereBetween('separacao_finalizada_em', [$inicio, $fim]);
+        $this->aplicarFiltroTipoDemandaEloquent($baseFinalizadas, $tipoDemanda);
         $aplicarTurno($baseFinalizadas, 'separacao_finalizada_em');
         $aplicarSeparadorDemanda($baseFinalizadas);
 
@@ -1495,20 +1930,32 @@ class DemandaController extends Controller
             ->where('possui_sobra', true)
             ->whereNotNull('separacao_finalizada_em')
             ->whereBetween('separacao_finalizada_em', [$inicioAnterior, $fimAnterior]);
+        $this->aplicarFiltroTipoDemandaEloquent($baseAnterior, $tipoDemanda);
         $aplicarTurno($baseAnterior, 'separacao_finalizada_em');
         $aplicarSeparadorDemanda($baseAnterior);
+
+        $baseExpedidas = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereNotNull('carregamento_finalizado_em')
+            ->whereBetween('carregamento_finalizado_em', [$inicio, $fim]);
+        $this->aplicarFiltroTipoDemandaEloquent($baseExpedidas, $tipoDemanda);
+        $aplicarTurno($baseExpedidas, 'carregamento_finalizado_em');
+        $aplicarSeparadorDemanda($baseExpedidas);
 
         $tempoExpr = $this->tempoDiffMinExpr('separacao_iniciada_em', 'separacao_finalizada_em');
         $criadas = (clone $baseCriadas)->count();
         $finalizadas = (clone $baseFinalizadas)->count();
         $finalizadasAnterior = (clone $baseAnterior)->count();
+        $expedidas = (clone $baseExpedidas)->count();
         $completas = (clone $baseFinalizadas)->where('separacao_resultado', 'COMPLETA')->count();
         $parciais = (clone $baseFinalizadas)->where('separacao_resultado', 'PARCIAL')->count();
         $emAbertoPeriodo = (clone $baseCriadas)->whereNull('separacao_finalizada_em')->count();
+        $separadasAguardandoExpedicao = (clone $baseFinalizadas)->whereNull('carregamento_finalizado_em')->count();
         $backlogAberto = Demanda::query()
             ->where('possui_sobra', true)
             ->where('created_at', '<', $inicio)
             ->whereNull('separacao_finalizada_em');
+        $this->aplicarFiltroTipoDemandaEloquent($backlogAberto, $tipoDemanda);
         $aplicarSeparadorDemanda($backlogAberto);
 
         $tempoMedioMin = (clone $baseFinalizadas)
@@ -1537,6 +1984,7 @@ class DemandaController extends Controller
             ->where('d.possui_sobra', true)
             ->whereNotNull('dd.finalizado_em')
             ->whereBetween('dd.finalizado_em', [$inicio, $fim]);
+        $this->aplicarFiltroTipoDemandaSql($baseDistribuicoes, $tipoDemanda, 'd');
 
         if ($turno) {
             $this->aplicarFiltroTurnoSql($baseDistribuicoes, 'dd.finalizado_em', $turno);
@@ -1580,6 +2028,80 @@ class DemandaController extends Controller
                 ];
             });
 
+        $metaCaixasHora = 1000;
+        $metaCaixasDia = 22500;
+        $dataReferenciaKpi = $fim->copy()->startOfDay();
+        $inicioDiaKpi = $dataReferenciaKpi->copy()->startOfDay();
+        $fimDiaKpi = $dataReferenciaKpi->copy()->endOfDay();
+        $inicioMesKpi = $dataReferenciaKpi->copy()->startOfMonth();
+        $fimMesKpi = $dataReferenciaKpi->copy()->endOfMonth();
+        $hourExprDistribuicao = $this->hourExpr('dd.finalizado_em');
+        $dateExprDistribuicao = $this->dateExpr('dd.finalizado_em');
+
+        $baseCaixasDia = DB::table('_tb_demanda_distribuicoes as dd')
+            ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
+            ->where('d.possui_sobra', true)
+            ->whereNotNull('dd.finalizado_em')
+            ->whereBetween('dd.finalizado_em', [$inicioDiaKpi, $fimDiaKpi]);
+        $this->aplicarFiltroTipoDemandaSql($baseCaixasDia, $tipoDemanda, 'd');
+
+        if ($turno) {
+            $this->aplicarFiltroTurnoSql($baseCaixasDia, 'dd.finalizado_em', $turno);
+        }
+
+        if ($separador !== '') {
+            $baseCaixasDia->where('dd.separador_nome', 'like', "%{$separador}%");
+        }
+
+        $caixasPorHoraRaw = (clone $baseCaixasDia)
+            ->selectRaw("{$hourExprDistribuicao} as hora")
+            ->selectRaw('SUM(COALESCE(dd.quantidade_pecas, 0)) as caixas')
+            ->groupBy('hora')
+            ->orderBy('hora')
+            ->pluck('caixas', 'hora');
+
+        $labelsHora = collect(range(0, 23))->map(fn($hora) => str_pad((string) $hora, 2, '0', STR_PAD_LEFT) . ':00');
+        $caixasPorHora = collect(range(0, 23))->map(fn($hora) => (int) ($caixasPorHoraRaw[$hora] ?? 0));
+        $totalCaixasDiaKpi = (int) $caixasPorHora->sum();
+        $horasComProducao = max(1, $caixasPorHora->filter(fn($valor) => $valor > 0)->count());
+        $mediaCaixasHora = round($totalCaixasDiaKpi / $horasComProducao, 1);
+
+        $baseCaixasMes = DB::table('_tb_demanda_distribuicoes as dd')
+            ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
+            ->where('d.possui_sobra', true)
+            ->whereNotNull('dd.finalizado_em')
+            ->whereBetween('dd.finalizado_em', [$inicioMesKpi, $fimMesKpi]);
+        $this->aplicarFiltroTipoDemandaSql($baseCaixasMes, $tipoDemanda, 'd');
+
+        if ($turno) {
+            $this->aplicarFiltroTurnoSql($baseCaixasMes, 'dd.finalizado_em', $turno);
+        }
+
+        if ($separador !== '') {
+            $baseCaixasMes->where('dd.separador_nome', 'like', "%{$separador}%");
+        }
+
+        $caixasPorDiaMesRaw = (clone $baseCaixasMes)
+            ->selectRaw("{$dateExprDistribuicao} as dia")
+            ->selectRaw('SUM(COALESCE(dd.quantidade_pecas, 0)) as caixas')
+            ->groupBy('dia')
+            ->orderBy('dia')
+            ->pluck('caixas', 'dia');
+
+        $labelsDiasMes = collect();
+        $valoresDiasMes = collect();
+        $cursorMes = $inicioMesKpi->copy();
+        while ($cursorMes <= $fimMesKpi) {
+            $diaKey = $cursorMes->toDateString();
+            $labelsDiasMes->push($cursorMes->format('d/m'));
+            $valoresDiasMes->push((int) ($caixasPorDiaMesRaw[$diaKey] ?? 0));
+            $cursorMes->addDay();
+        }
+
+        $diasComProducaoMes = max(1, $valoresDiasMes->filter(fn($valor) => $valor > 0)->count());
+        $totalCaixasMes = (int) $valoresDiasMes->sum();
+        $mediaCaixasDiaMes = round($totalCaixasMes / $diasComProducaoMes, 1);
+
         $labelsPeriodo = collect();
         $cursor = $inicio->copy()->startOfDay();
         while ($cursor <= $fim) {
@@ -1590,6 +2112,7 @@ class DemandaController extends Controller
         $criadasPorDiaQuery = Demanda::query()
             ->where('possui_sobra', true)
             ->whereBetween('created_at', [$inicio, $fim]);
+        $this->aplicarFiltroTipoDemandaEloquent($criadasPorDiaQuery, $tipoDemanda);
         $aplicarTurno($criadasPorDiaQuery, 'created_at');
         $aplicarSeparadorDemanda($criadasPorDiaQuery);
         $criadasPorDia = $criadasPorDiaQuery
@@ -1602,6 +2125,7 @@ class DemandaController extends Controller
             ->where('possui_sobra', true)
             ->whereNotNull('separacao_finalizada_em')
             ->whereBetween('separacao_finalizada_em', [$inicio, $fim]);
+        $this->aplicarFiltroTipoDemandaEloquent($finalizadasPorDiaQuery, $tipoDemanda);
         $aplicarTurno($finalizadasPorDiaQuery, 'separacao_finalizada_em');
         $aplicarSeparadorDemanda($finalizadasPorDiaQuery);
         $finalizadasPorDia = $finalizadasPorDiaQuery
@@ -1621,11 +2145,15 @@ class DemandaController extends Controller
         $resumo = [
             'criadas' => $criadas,
             'finalizadas' => $finalizadas,
+            'separadas' => $finalizadas,
+            'expedidas' => $expedidas,
+            'separadas_aguardando_expedicao' => $separadasAguardandoExpedicao,
             'em_aberto_periodo' => $emAbertoPeriodo,
             'backlog_aberto' => (clone $backlogAberto)->count(),
             'completas' => $completas,
             'parciais' => $parciais,
             'percentual_conclusao' => $criadas > 0 ? round(($finalizadas / $criadas) * 100, 1) : 0,
+            'percentual_expedicao_sobre_separacao' => $finalizadas > 0 ? round(($expedidas / $finalizadas) * 100, 1) : 0,
             'percentual_parcial' => $finalizadas > 0 ? round(($parciais / $finalizadas) * 100, 1) : 0,
             'sla_no_dia' => $slaNoDia,
             'finalizadas_no_dia' => $finalizadasNoDia,
@@ -1636,17 +2164,31 @@ class DemandaController extends Controller
             'skus' => (int) ($totaisDistribuicoes->skus ?? 0),
             'dts_com_apontamento' => (int) ($totaisDistribuicoes->dts ?? 0),
             'variacao_volume' => $variacaoVolume,
+            'meta_caixas_hora' => $metaCaixasHora,
+            'meta_caixas_dia' => $metaCaixasDia,
+            'caixas_dia_kpi' => $totalCaixasDiaKpi,
+            'media_caixas_hora' => $mediaCaixasHora,
+            'caixas_mes' => $totalCaixasMes,
+            'media_caixas_dia_mes' => $mediaCaixasDiaMes,
         ];
+        $visaoDemanda = $this->montarResumoTipoDemandaPeriodo($inicio, $fim);
+        $referenciaCapacidade = now()->betweenIncluded($inicio, $fim)
+            ? now()
+            : $fim->copy();
+        $capacidadeOperacional = app(CapacidadeOperacionalService::class)->analisar($referenciaCapacidade);
 
         $pontosAtencao = collect();
         if ($resumo['backlog_aberto'] > 0) {
             $pontosAtencao->push("Backlog aberto de {$resumo['backlog_aberto']} DTs anteriores ao período.");
         }
         if ($resumo['percentual_parcial'] >= 15) {
-            $pontosAtencao->push("Separação parcial em {$resumo['percentual_parcial']}% das DTs finalizadas.");
+            $pontosAtencao->push("Separação parcial em {$resumo['percentual_parcial']}% das DTs separadas.");
         }
         if ($resumo['sla_no_dia'] < 80 && $finalizadas > 0) {
             $pontosAtencao->push("SLA no mesmo dia em {$resumo['sla_no_dia']}%, abaixo do patamar de atenção.");
+        }
+        if ($resumo['separadas_aguardando_expedicao'] > 0) {
+            $pontosAtencao->push("Há {$resumo['separadas_aguardando_expedicao']} DTs separadas no período ainda sem expedição/carregamento finalizado.");
         }
         if ($pontosAtencao->isEmpty()) {
             $pontosAtencao->push('Operação sem alertas críticos nos indicadores principais do período.');
@@ -1659,16 +2201,24 @@ class DemandaController extends Controller
             'Período: ' . $inicio->format('d/m/Y') . ' até ' . $fim->format('d/m/Y'),
             "Turno: {$turnoLabel}",
             "Separador: {$separadorLabel}",
+            'Tipo demanda: ' . ($tipoDemanda === 'TODAS' ? 'Todas' : ucfirst(strtolower($tipoDemanda))),
             '',
             '*Resumo executivo*',
             'DTs criadas: ' . number_format($resumo['criadas'], 0, ',', '.'),
-            'DTs finalizadas: ' . number_format($resumo['finalizadas'], 0, ',', '.'),
-            'Conclusão: ' . number_format($resumo['percentual_conclusao'], 1, ',', '.') . '%',
-            'SLA mesmo dia: ' . number_format($resumo['sla_no_dia'], 1, ',', '.') . '%',
-            'Backlog aberto: ' . number_format($resumo['backlog_aberto'], 0, ',', '.'),
+            'DTs separadas: ' . number_format($resumo['separadas'], 0, ',', '.'),
+            'Conclusão da separação: ' . number_format($resumo['percentual_conclusao'], 1, ',', '.') . '%',
+            'SLA separação no mesmo dia: ' . number_format($resumo['sla_no_dia'], 1, ',', '.') . '%',
+            'DTs expedidas: ' . number_format($resumo['expedidas'], 0, ',', '.'),
+            'Aguardando expedição: ' . number_format($resumo['separadas_aguardando_expedicao'], 0, ',', '.'),
+            'Backlog separação: ' . number_format($resumo['backlog_aberto'], 0, ',', '.'),
             'Caixas/peças: ' . number_format($resumo['pecas'], 0, ',', '.'),
+            'Caixas no dia: ' . number_format($resumo['caixas_dia_kpi'], 0, ',', '.') . ' | Meta diária: ' . number_format($metaCaixasDia, 0, ',', '.'),
+            'Média caixas/hora: ' . number_format($resumo['media_caixas_hora'], 1, ',', '.') . ' | Meta hora: ' . number_format($metaCaixasHora, 0, ',', '.'),
             'SKUs: ' . number_format($resumo['skus'], 0, ',', '.'),
             'Tempo médio: ' . ($resumo['tempo_medio_min'] !== null ? number_format($resumo['tempo_medio_min'], 1, ',', '.') . ' min' : '-'),
+            'Capacidade consumida: ' . number_format($capacidadeOperacional['capacidade']['consumida_percentual'] ?? 0, 1, ',', '.') . '%',
+            'Risco operacional: ' . ($capacidadeOperacional['risco']['label'] ?? '-'),
+            'Backlog previsto: ' . number_format($capacidadeOperacional['risco']['backlog_projetado'] ?? 0, 0, ',', '.'),
             '',
             '*Produtividade - Top 5*',
         ];
@@ -1706,13 +2256,29 @@ class DemandaController extends Controller
                 'dts' => $produtividade->pluck('dts')->values(),
             ],
             'status' => [
-                'labels' => ['Completas', 'Parciais', 'Em aberto', 'Backlog'],
+                'labels' => ['Sep. completas', 'Sep. parciais', 'Em separação', 'Backlog sep.'],
                 'values' => [
                     $resumo['completas'],
                     $resumo['parciais'],
                     $resumo['em_aberto_periodo'],
                     $resumo['backlog_aberto'],
                 ],
+            ],
+            'caixasPorHora' => [
+                'labels' => $labelsHora->values(),
+                'values' => $caixasPorHora->values(),
+                'meta' => $metaCaixasHora,
+                'total' => $totalCaixasDiaKpi,
+                'media' => $mediaCaixasHora,
+                'data' => $dataReferenciaKpi->format('d/m/Y'),
+            ],
+            'caixasPorDiaMes' => [
+                'labels' => $labelsDiasMes->values(),
+                'values' => $valoresDiasMes->values(),
+                'meta' => $metaCaixasDia,
+                'total' => $totalCaixasMes,
+                'media' => $mediaCaixasDiaMes,
+                'mes' => $dataReferenciaKpi->format('m/Y'),
             ],
         ];
 
@@ -1724,8 +2290,11 @@ class DemandaController extends Controller
             'turnoSelecionado' => $turno,
             'turnosOperacionais' => $turnos,
             'separadorSelecionado' => $separador,
+            'tipoDemanda' => $tipoDemanda,
             'separadoresDisponiveis' => $separadoresDisponiveis,
             'resumo' => $resumo,
+            'visaoDemanda' => $visaoDemanda,
+            'capacidadeOperacional' => $capacidadeOperacional,
             'produtividade' => $produtividade,
             'pontosAtencao' => $pontosAtencao,
             'dadosGraficos' => $dadosGraficos,
@@ -1797,6 +2366,213 @@ class DemandaController extends Controller
         ]);
 
         return response()->noContent();
+    }
+
+    private function payloadRelatorio(string $slug, string $titulo, $rows, Request $request, string $tipoDemanda): array
+    {
+        $rows = collect($rows)->values();
+
+        return [
+            'slug' => $slug,
+            'titulo' => $titulo,
+            'periodo' => $this->periodoRelatorioTexto($request),
+            'tipoDemanda' => $tipoDemanda === 'TODAS' ? 'Todas' : ucfirst(strtolower($tipoDemanda)),
+            'geradoEm' => now()->format('d/m/Y H:i'),
+            'headings' => $this->headingsRelatorioOperacional($slug, $rows),
+            'rows' => $rows,
+        ];
+    }
+
+    private function headingsRelatorioOperacional(string $slug, $rows): array
+    {
+        if ($rows->isNotEmpty()) {
+            return array_keys($rows->first());
+        }
+
+        return match ($slug) {
+            'ciclo-expedicao' => ['DT', 'Tipo demanda', 'Cliente', 'Transportadora', 'Importação', 'Início separação', 'Fim separação', 'Resultado separação', 'Tempo separação', 'Início conferência', 'Fim conferência', 'Tempo conferência', 'Início carregamento', 'Fim carregamento', 'Tempo carregamento', 'Saída veículo', 'Responsável saída', 'Status ciclo'],
+            'saida-veiculos' => ['DT', 'Tipo demanda', 'Cliente', 'Transportadora', 'Fim carregamento', 'Saída veículo', 'Tempo carregado até saída', 'Responsável', 'Observação', 'Status'],
+            'produtividade-separador' => ['Separador', 'Peças separadas', 'SKUs separados', 'DTs atendidas', 'Tempo médio', 'Parciais', '% parcial', 'Primeiro início', 'Última finalização'],
+            'dts-picking' => ['DT', 'Tipo demanda', 'Cliente', 'Transportadora', 'Importação', 'SKUs total', 'SKUs com sobra', 'Início separação', 'Fim separação', 'Tempo separação', 'Status separação', 'Conferência finalizada', 'Carregamento finalizado', 'Saída veículo', 'Status ciclo'],
+            'curva-abc-skus' => ['SKU', 'Descrição', 'Unidade', 'Qtd total', 'DTs atendidas', '% participação', '% acumulado', 'Classe'],
+            'gargalos-operacionais' => ['DT', 'Tipo demanda', 'Cliente', 'Status ciclo', 'Maior gargalo', 'Tempo do gargalo', 'Tempo separação', 'Tempo conferência', 'Tempo carregamento', 'Tempo carregado até saída'],
+            'sla-separacao' => ['Data operação', 'DTs picking', 'Finalizadas separação', 'Pendentes separação', 'Parciais', '% finalização', 'Tempo médio separação'],
+            default => [],
+        };
+    }
+
+    private function aplicarPeriodoRelatorioEloquent($query, Request $request, string $column): void
+    {
+        if (! $request->filled('data_inicio') && ! $request->filled('data_fim')) {
+            return;
+        }
+
+        [$inicio, $fim] = $this->intervaloPeriodoRelatorio($request);
+        $query->whereBetween($column, [$inicio, $fim]);
+    }
+
+    private function aplicarPeriodoRelatorioSql($query, Request $request, string $column): void
+    {
+        if (! $request->filled('data_inicio') && ! $request->filled('data_fim')) {
+            return;
+        }
+
+        [$inicio, $fim] = $this->intervaloPeriodoRelatorio($request);
+        $query->whereBetween($column, [$inicio, $fim]);
+    }
+
+    private function aplicarPeriodoSaidaVeiculo($query, Request $request): void
+    {
+        if (! $request->filled('data_inicio') && ! $request->filled('data_fim')) {
+            return;
+        }
+
+        [$inicio, $fim] = $this->intervaloPeriodoRelatorio($request);
+        $query->where(function ($query) use ($inicio, $fim) {
+            $query->whereBetween('d.saida_veiculo_em', [$inicio, $fim])
+                ->orWhere(function ($query) use ($inicio, $fim) {
+                    $query->whereNull('d.saida_veiculo_em')
+                        ->whereBetween('d.carregamento_finalizado_em', [$inicio, $fim]);
+                });
+        });
+    }
+
+    private function intervaloPeriodoRelatorio(Request $request): array
+    {
+        $inicio = $request->filled('data_inicio')
+            ? Carbon::parse($request->input('data_inicio'))->startOfDay()
+            : Carbon::create(2000, 1, 1)->startOfDay();
+
+        $fim = $request->filled('data_fim')
+            ? Carbon::parse($request->input('data_fim'))->endOfDay()
+            : now()->endOfDay();
+
+        if ($inicio->gt($fim)) {
+            return [$fim->copy()->startOfDay(), $inicio->copy()->endOfDay()];
+        }
+
+        return [$inicio, $fim];
+    }
+
+    private function periodoRelatorioTexto(Request $request): string
+    {
+        if (! $request->filled('data_inicio') && ! $request->filled('data_fim')) {
+            return 'Todo o histórico';
+        }
+
+        [$inicio, $fim] = $this->intervaloPeriodoRelatorio($request);
+
+        return $inicio->format('d/m/Y') . ' até ' . $fim->format('d/m/Y');
+    }
+
+    private function tipoDemandaSubquery(string $demandaAlias): string
+    {
+        return "(select ep.tipo_demanda from _tb_expedicao_programacoes ep where ep.fo = {$demandaAlias}.fo order by ep.id desc limit 1)";
+    }
+
+    private function formatarDataHoraRelatorio($value): string
+    {
+        if (! $value) {
+            return '-';
+        }
+
+        try {
+            $data = Carbon::parse($value);
+        } catch (\Throwable) {
+            return '-';
+        }
+
+        if ($data->lt(Demanda::DATA_OPERACIONAL_MINIMA)) {
+            return '-';
+        }
+
+        return $data->format('d/m/Y H:i');
+    }
+
+    private function minutosEntreRelatorio($inicio, $fim): ?float
+    {
+        if (! $inicio || ! $fim) {
+            return null;
+        }
+
+        try {
+            $inicio = Carbon::parse($inicio);
+            $fim = Carbon::parse($fim);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if ($inicio->lt(Demanda::DATA_OPERACIONAL_MINIMA) || $fim->lt(Demanda::DATA_OPERACIONAL_MINIMA) || $fim->lt($inicio)) {
+            return null;
+        }
+
+        return $inicio->diffInMinutes($fim);
+    }
+
+    private function formatarIntervaloRelatorio($inicio, $fim): string
+    {
+        return $this->formatarMinutosRelatorio($this->minutosEntreRelatorio($inicio, $fim));
+    }
+
+    private function formatarMinutosRelatorio($minutos): string
+    {
+        if ($minutos === null || $minutos === '') {
+            return '-';
+        }
+
+        $minutos = (int) round((float) $minutos);
+        if ($minutos < 60) {
+            return $minutos . ' min';
+        }
+
+        $horas = intdiv($minutos, 60);
+        $restante = $minutos % 60;
+
+        return $restante > 0 ? "{$horas}h {$restante}min" : "{$horas}h";
+    }
+
+    private function minutosTextoParaOrdenacao(string $texto): int
+    {
+        if ($texto === '-') {
+            return 0;
+        }
+
+        $total = 0;
+        if (preg_match('/(\d+)h/', $texto, $horas)) {
+            $total += ((int) $horas[1]) * 60;
+        }
+        if (preg_match('/(\d+)\s*min/', $texto, $minutos)) {
+            $total += (int) $minutos[1];
+        }
+
+        return $total;
+    }
+
+    private function statusCicloRelatorio($item): string
+    {
+        if (data_get($item, 'saida_veiculo_em')) {
+            return 'CICLO FECHADO';
+        }
+        if (data_get($item, 'carregamento_finalizado_em')) {
+            return 'AGUARDANDO SAÍDA';
+        }
+        if (data_get($item, 'carregamento_iniciado_em')) {
+            return 'CARREGANDO';
+        }
+        if (data_get($item, 'conferencia_finalizada_em')) {
+            return 'AGUARDANDO CARGA';
+        }
+        if (data_get($item, 'conferencia_iniciada_em')) {
+            return 'CONFERINDO';
+        }
+        if (data_get($item, 'separacao_finalizada_em')) {
+            return 'AGUARDANDO EXPEDIÇÃO';
+        }
+        if (data_get($item, 'separacao_iniciada_em')) {
+            return 'SEPARANDO';
+        }
+
+        return 'A SEPARAR';
     }
 
     private function aplicarFiltrosOperacionais($query, ?string $turno, ?string $data)
@@ -1891,6 +2667,166 @@ class DemandaController extends Controller
                     ->orWhereRaw("TIME({$colunaDataHora}) BETWEEN ? AND ?", ['00:00:00', '06:10:59']);
             });
         }
+    }
+
+    private function normalizarTipoDemandaRelatorio(?string $tipoDemanda): string
+    {
+        $tipoDemanda = strtoupper(trim((string) $tipoDemanda));
+
+        return in_array($tipoDemanda, ExpedicaoProgramacao::tiposDemanda(), true)
+            ? $tipoDemanda
+            : 'TODAS';
+    }
+
+    private function aplicarFiltroTipoDemandaEloquent($query, string $tipoDemanda): void
+    {
+        if ($tipoDemanda === 'TODAS') {
+            return;
+        }
+
+        if ($tipoDemanda === ExpedicaoProgramacao::TIPO_OPORTUNIDADE) {
+            $query->whereExists(function ($subquery) {
+                $subquery->selectRaw('1')
+                    ->from('_tb_expedicao_programacoes as ep')
+                    ->whereColumn('ep.fo', '_tb_demanda.fo')
+                    ->where('ep.tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE);
+            });
+
+            return;
+        }
+
+        $query->where(function ($query) {
+            $query->whereNotExists(function ($subquery) {
+                $subquery->selectRaw('1')
+                    ->from('_tb_expedicao_programacoes as ep')
+                    ->whereColumn('ep.fo', '_tb_demanda.fo');
+            })->orWhereExists(function ($subquery) {
+                $subquery->selectRaw('1')
+                    ->from('_tb_expedicao_programacoes as ep')
+                    ->whereColumn('ep.fo', '_tb_demanda.fo')
+                    ->where('ep.tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA);
+            });
+        });
+    }
+
+    private function aplicarFiltroTipoDemandaSql($query, string $tipoDemanda, string $demandaAlias): void
+    {
+        if ($tipoDemanda === 'TODAS') {
+            return;
+        }
+
+        if ($tipoDemanda === ExpedicaoProgramacao::TIPO_OPORTUNIDADE) {
+            $query->whereExists(function ($subquery) use ($demandaAlias) {
+                $subquery->selectRaw('1')
+                    ->from('_tb_expedicao_programacoes as ep')
+                    ->whereColumn('ep.fo', "{$demandaAlias}.fo")
+                    ->where('ep.tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE);
+            });
+
+            return;
+        }
+
+        $query->where(function ($query) use ($demandaAlias) {
+            $query->whereNotExists(function ($subquery) use ($demandaAlias) {
+                $subquery->selectRaw('1')
+                    ->from('_tb_expedicao_programacoes as ep')
+                    ->whereColumn('ep.fo', "{$demandaAlias}.fo");
+            })->orWhereExists(function ($subquery) use ($demandaAlias) {
+                $subquery->selectRaw('1')
+                    ->from('_tb_expedicao_programacoes as ep')
+                    ->whereColumn('ep.fo', "{$demandaAlias}.fo")
+                    ->where('ep.tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA);
+            });
+        });
+    }
+
+    private function montarResumoTipoDemandaPeriodo(Carbon $inicio, Carbon $fim): array
+    {
+        $programadasTotal = ExpedicaoProgramacao::query()
+            ->where('tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA)
+            ->whereBetween('agenda_entrega_em', [$inicio, $fim])
+            ->count();
+        $programadasSeparadas = ExpedicaoProgramacao::query()
+            ->join('_tb_demanda as d', 'd.fo', '=', '_tb_expedicao_programacoes.fo')
+            ->where('_tb_expedicao_programacoes.tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA)
+            ->whereBetween('_tb_expedicao_programacoes.agenda_entrega_em', [$inicio, $fim])
+            ->whereNotNull('d.separacao_finalizada_em')
+            ->count();
+        $programadasExpedidas = ExpedicaoProgramacao::query()
+            ->join('_tb_demanda as d', 'd.fo', '=', '_tb_expedicao_programacoes.fo')
+            ->where('_tb_expedicao_programacoes.tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA)
+            ->whereBetween('_tb_expedicao_programacoes.agenda_entrega_em', [$inicio, $fim])
+            ->whereNotNull('d.carregamento_finalizado_em')
+            ->count();
+        $oportunidadesTotal = ExpedicaoProgramacao::query()
+            ->where('tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE)
+            ->whereBetween('agenda_entrega_em', [$inicio, $fim])
+            ->count();
+        $oportunidadesSeparadas = ExpedicaoProgramacao::query()
+            ->join('_tb_demanda as d', 'd.fo', '=', '_tb_expedicao_programacoes.fo')
+            ->where('_tb_expedicao_programacoes.tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE)
+            ->whereBetween('_tb_expedicao_programacoes.agenda_entrega_em', [$inicio, $fim])
+            ->whereNotNull('d.separacao_finalizada_em')
+            ->count();
+        $oportunidadesExpedidas = ExpedicaoProgramacao::query()
+            ->join('_tb_demanda as d', 'd.fo', '=', '_tb_expedicao_programacoes.fo')
+            ->where('_tb_expedicao_programacoes.tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE)
+            ->whereBetween('_tb_expedicao_programacoes.agenda_entrega_em', [$inicio, $fim])
+            ->whereNotNull('d.carregamento_finalizado_em')
+            ->count();
+
+        return [
+            'programadas_total' => $programadasTotal,
+            'programadas_executadas' => $programadasSeparadas,
+            'programadas_separadas' => $programadasSeparadas,
+            'programadas_expedidas' => $programadasExpedidas,
+            'programadas_pendentes' => max(0, $programadasTotal - $programadasSeparadas),
+            'programadas_pendentes_expedicao' => max(0, $programadasSeparadas - $programadasExpedidas),
+            'programadas_atendimento' => $programadasTotal > 0 ? round(($programadasSeparadas / $programadasTotal) * 100, 1) : 0,
+            'programadas_atendimento_expedicao' => $programadasTotal > 0 ? round(($programadasExpedidas / $programadasTotal) * 100, 1) : 0,
+            'oportunidades_total' => $oportunidadesTotal,
+            'oportunidades_executadas' => $oportunidadesSeparadas,
+            'oportunidades_separadas' => $oportunidadesSeparadas,
+            'oportunidades_expedidas' => $oportunidadesExpedidas,
+            'oportunidades_pendentes' => max(0, $oportunidadesTotal - $oportunidadesSeparadas),
+            'oportunidades_pendentes_expedicao' => max(0, $oportunidadesSeparadas - $oportunidadesExpedidas),
+            'total_operado' => $programadasSeparadas + $oportunidadesSeparadas,
+            'total_separado' => $programadasSeparadas + $oportunidadesSeparadas,
+            'total_expedido' => $programadasExpedidas + $oportunidadesExpedidas,
+            'total_planejado_antecipado' => $programadasTotal + $oportunidadesTotal,
+        ];
+    }
+
+    private function montarResumoTipoDemandaTurno(Carbon $inicioTurno, Carbon $fimTurno): array
+    {
+        $montar = function (string $tipo) use ($inicioTurno, $fimTurno) {
+            $recebidas = ExpedicaoProgramacao::query()
+                ->where('tipo_demanda', $tipo)
+                ->whereBetween('created_at', [$inicioTurno, $fimTurno])
+                ->count();
+            $executadas = ExpedicaoProgramacao::query()
+                ->join('_tb_demanda as d', 'd.fo', '=', '_tb_expedicao_programacoes.fo')
+                ->where('_tb_expedicao_programacoes.tipo_demanda', $tipo)
+                ->whereBetween('d.separacao_finalizada_em', [$inicioTurno, $fimTurno])
+                ->count();
+            $pendentes = ExpedicaoProgramacao::query()
+                ->leftJoin('_tb_demanda as d', 'd.fo', '=', '_tb_expedicao_programacoes.fo')
+                ->where('_tb_expedicao_programacoes.tipo_demanda', $tipo)
+                ->whereBetween('_tb_expedicao_programacoes.created_at', [$inicioTurno, $fimTurno])
+                ->whereNull('d.separacao_finalizada_em')
+                ->count();
+
+            return compact('recebidas', 'executadas', 'pendentes');
+        };
+
+        $programadas = $montar(ExpedicaoProgramacao::TIPO_PROGRAMADA);
+        $oportunidades = $montar(ExpedicaoProgramacao::TIPO_OPORTUNIDADE);
+
+        return [
+            'programadas' => $programadas,
+            'oportunidades' => $oportunidades,
+            'passagem_turno' => $programadas['pendentes'] + $oportunidades['pendentes'],
+        ];
     }
 
     private function turnosOperacionais(): array
