@@ -19,14 +19,14 @@ use App\Http\Controllers\Api\V1\ApontamentoPaleteStretchApiController;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
-Route::middleware('throttle:20,1')->group(function () {
+Route::middleware('throttle:login')->group(function () {
     Route::post('/v1/auth/login', [AuthController::class, 'apiLogin']);
     Route::post('/login', [AuthController::class, 'apiLogin']);
     Route::post('/login-microsoft', [MicrosoftApiController::class, 'loginFromApp']);
     Route::post('/auth/microsoft', [MicrosoftApiController::class, 'loginFromApp']);
 });
 
-Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
+Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/', function () {
         return response()->json([
             'success' => true,
@@ -45,7 +45,7 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:60,1'])->group(functi
     Route::post('/apontamentos-paletes-stretch', [ApontamentoPaleteStretchApiController::class, 'store']);
 });
 
-Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/contagem-livre', [ContagemLivreController::class, 'store']);
 
     Route::prefix('armazenagem')->group(function () {
@@ -123,10 +123,10 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     Route::get('/painel/recebimentos', [RecebimentoController::class, 'listar']);
 
 
-Route::get('/demandas', [DemandaController::class, 'index']);
-Route::get('/demandas/{id}', [DemandaController::class, 'show']);
-Route::get('/demandas/{id}/historico', [DemandaController::class, 'historico']);
+Route::get('/demandas', [DemandaController::class, 'index'])->middleware('permission:demandas.view');
+Route::get('/demandas/{id}', [DemandaController::class, 'show'])->middleware('permission:demandas.view');
+Route::get('/demandas/{id}/historico', [DemandaController::class, 'historico'])->middleware('permission:demandas.view');
 
-Route::put('/demandas/{id}', [DemandaController::class, 'update']);
-Route::post('/demandas/{id}/status', [DemandaController::class, 'atualizarStatus']);
+Route::put('/demandas/{id}', [DemandaController::class, 'update'])->middleware(['permission:demandas.edit', 'throttle:critical']);
+Route::post('/demandas/{id}/status', [DemandaController::class, 'atualizarStatus'])->middleware(['permission:demandas.edit', 'throttle:critical']);
 });

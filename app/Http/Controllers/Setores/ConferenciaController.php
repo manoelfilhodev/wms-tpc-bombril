@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Intervention\Image\ImageManager;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Intervention\Image\Drivers\Gd\Driver;
 use App\Http\Controllers\Setores\ConferenciaController;
 
@@ -124,7 +125,7 @@ class ConferenciaController extends Controller
     // Foto de avaria
     if ($request->hasFile('foto_avaria')) {
         $foto = $request->file('foto_avaria');
-        $nomeFoto = 'avaria_rec_' . $recebimento_id . '_item_' . $item_id . '_' . time() . '.' . $foto->getClientOriginalExtension();
+        $nomeFoto = 'avaria_' . Str::uuid() . '.' . $foto->extension();
         $foto->storeAs('public/recebimentos/avarias', $nomeFoto);
         $dados['foto_avaria'] = 'recebimentos/avarias/' . $nomeFoto;
     }
@@ -250,7 +251,7 @@ class ConferenciaController extends Controller
     
             if ($request->hasFile('foto_avaria')) {
                 $file = $request->file('foto_avaria');
-                $nome = 'avaria_rec_' . $id . '_item_' . $request->item_id . '_' . time() . '.' . $file->getClientOriginalExtension();
+                $nome = 'avaria_' . Str::uuid() . '.' . $file->extension();
                 $caminho = $file->storeAs('public/recebimentos/avarias', $nome);
                 $dados['foto_avaria'] = 'recebimentos/avarias/' . $nome;
             }
@@ -273,13 +274,8 @@ public function salvarFotoInicio(Request $request, $id)
         'foto' => 'required|image|mimes:jpeg,jpg,png|max:5120',
     ]);
 
-    $pasta = public_path('recebimento/fotos_inicio');
-    if (!file_exists($pasta)) {
-        mkdir($pasta, 0755, true);
-    }
-
-    $nomeArquivo = uniqid() . '.' . $request->file('foto')->getClientOriginalExtension();
-    $request->file('foto')->move($pasta, $nomeArquivo);
+    $nomeArquivo = 'foto_inicio_' . Str::uuid() . '.' . $request->file('foto')->extension();
+    $request->file('foto')->storeAs('public/recebimento/fotos_inicio', $nomeArquivo);
 
     $relativo = "recebimento/fotos_inicio/{$nomeArquivo}";
 
@@ -420,7 +416,7 @@ public function salvarFotoInicio(Request $request, $id)
     
         // Salvar a foto final do veículo
         $foto = $request->file('foto_fim_veiculo');
-        $nome = 'fim_veiculo_rec_' . $id . '_' . time() . '.' . $foto->getClientOriginalExtension();
+        $nome = 'fim_veiculo_' . Str::uuid() . '.' . $foto->extension();
         $caminho = 'recebimentos/fotos_veiculo/' . $nome;
         $foto->storeAs('public/' . $caminho);
     

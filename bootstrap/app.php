@@ -1,6 +1,8 @@
 <?php
 
 use App\Services\DeviceAuthorizationService;
+use App\Events\SecurityEvent;
+use App\Services\SecurityAuditService;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
@@ -42,15 +44,22 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->api(append: [
+            App\Http\Middleware\BlockMaliciousUploads::class,
+            App\Http\Middleware\SecurityHeaders::class,
+            App\Http\Middleware\SecurityAuditMiddleware::class,
             App\Http\Middleware\ApiRequestLogger::class,
         ]);
         $middleware->web(append: [
+            App\Http\Middleware\BlockMaliciousUploads::class,
+            App\Http\Middleware\SecurityHeaders::class,
             App\Http\Middleware\EnsureOperationalRouteIsAuthenticated::class,
+            App\Http\Middleware\SecurityAuditMiddleware::class,
         ]);
         $middleware->alias([
             'admin' => App\Http\Middleware\AdminMiddleware::class,
             'demanda.perfil' => App\Http\Middleware\DemandaPerfilMiddleware::class,
             'module.permission' => App\Http\Middleware\EnsureModulePermission::class,
+            'permission' => App\Http\Middleware\EnsureModulePermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
@@ -100,6 +109,20 @@ return Application::configure(basePath: dirname(__DIR__))
                 'data' => (object) [],
                 'meta' => (object) [],
             ], 401);
+        });
+
+        $exceptions->render(function (HttpExceptionInterface $exception, Request $request) {
+            if ($exception->getStatusCode() === 403) {
+                app(SecurityAuditService::class)->recordSecurityEvent(
+                    new SecurityEvent(SecurityEvent::PERMISSION_DENIED, [
+                        'module' => 'authorization',
+                        'path' => $request->path(),
+                    ]),
+                    $request
+                );
+            }
+
+            return null;
         });
 
         $exceptions->render(function (Throwable $exception, Request $request) use ($isApiRequest) {

@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
     public function run()
     {
         $this->call([
+            RbacSeeder::class,
             UnidadeSeeder::class,
             CategoriaSeeder::class,
             UsuarioSeeder::class,
@@ -25,6 +26,7 @@ class DatabaseSeeder extends Seeder
             SeparacaoSeeder::class,
             DemandaSeeder::class,
             InventarioSeeder::class,
+            RbacSeeder::class,
         ]);
     }
 }

@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Facades\Schema;
 
 class User extends Authenticatable
 {
@@ -29,9 +31,45 @@ class User extends Authenticatable
         'password',
         'remember_token'
     ];
+
+    protected static function booted(): void
+    {
+        static::created(function (User $user): void {
+            if (! Schema::hasTable('roles') || ! Schema::hasTable('user_role')) {
+                return;
+            }
+
+            $roleName = match (strtolower((string) $user->tipo)) {
+                'admin' => 'admin',
+                'gestor', 'supervisor' => 'gestor',
+                default => 'operador',
+            };
+
+            $role = Role::query()->where('name', $roleName)->first();
+            if ($role) {
+                $user->roles()->syncWithoutDetaching([$role->id]);
+            }
+        });
+    }
     
     public function contagens()
 {
     return $this->hasMany(ContagemItem::class, 'usuario_id', 'id_user');
 }
+
+    public function roles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class, 'user_role', 'user_id', 'role_id');
+    }
+
+    public function hasPermission(string $permission): bool
+    {
+        if (! Schema::hasTable('roles') || ! Schema::hasTable('permissions') || ! Schema::hasTable('role_permission')) {
+            return false;
+        }
+
+        return $this->roles()
+            ->whereHas('permissions', fn ($query) => $query->where('name', $permission))
+            ->exists();
+    }
 }
