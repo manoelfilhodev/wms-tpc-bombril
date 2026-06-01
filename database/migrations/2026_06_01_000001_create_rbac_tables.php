@@ -9,32 +9,48 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('roles', function (Blueprint $table) {
-            $table->id();
-            $table->string('name', 80)->unique();
-            $table->string('label', 120)->nullable();
-            $table->timestamps();
-        });
+        if (! Schema::hasTable('roles')) {
+            Schema::create('roles', function (Blueprint $table) {
+                $table->id();
+                $table->string('name', 80)->unique();
+                $table->string('label', 120)->nullable();
+                $table->timestamps();
+            });
+        }
 
-        Schema::create('permissions', function (Blueprint $table) {
-            $table->id();
-            $table->string('name', 120)->unique();
-            $table->string('label', 160)->nullable();
-            $table->timestamps();
-        });
+        if (! Schema::hasTable('permissions')) {
+            Schema::create('permissions', function (Blueprint $table) {
+                $table->id();
+                $table->string('name', 120)->unique();
+                $table->string('label', 160)->nullable();
+                $table->timestamps();
+            });
+        }
 
-        Schema::create('role_permission', function (Blueprint $table) {
-            $table->foreignId('role_id')->constrained('roles')->cascadeOnDelete();
-            $table->foreignId('permission_id')->constrained('permissions')->cascadeOnDelete();
-            $table->primary(['role_id', 'permission_id']);
-        });
+        if (! Schema::hasTable('role_permission')) {
+            Schema::create('role_permission', function (Blueprint $table) {
+                $table->foreignId('role_id')->constrained('roles')->cascadeOnDelete();
+                $table->foreignId('permission_id')->constrained('permissions')->cascadeOnDelete();
+                $table->primary(['role_id', 'permission_id']);
+            });
+        }
 
-        Schema::create('user_role', function (Blueprint $table) {
-            $table->unsignedInteger('user_id');
-            $table->foreignId('role_id')->constrained('roles')->cascadeOnDelete();
-            $table->primary(['user_id', 'role_id']);
-            $table->foreign('user_id')->references('id_user')->on('_tb_usuarios')->cascadeOnDelete();
-        });
+        if (! Schema::hasTable('user_role')) {
+            Schema::create('user_role', function (Blueprint $table) {
+                $table->integer('user_id');
+                $table->foreignId('role_id')->constrained('roles')->cascadeOnDelete();
+                $table->primary(['user_id', 'role_id']);
+                $table->foreign('user_id')->references('id_user')->on('_tb_usuarios')->cascadeOnDelete();
+            });
+        } else {
+            DB::statement('ALTER TABLE `user_role` MODIFY `user_id` INT NOT NULL');
+
+            if (! $this->foreignKeyExists('user_role', 'user_role_user_id_foreign')) {
+                Schema::table('user_role', function (Blueprint $table) {
+                    $table->foreign('user_id')->references('id_user')->on('_tb_usuarios')->cascadeOnDelete();
+                });
+            }
+        }
 
         $this->seedDefaults();
     }
@@ -121,5 +137,15 @@ return new class extends Migration
                 }
             }
         });
+    }
+
+    private function foreignKeyExists(string $table, string $constraint): bool
+    {
+        return DB::table('information_schema.TABLE_CONSTRAINTS')
+            ->where('CONSTRAINT_SCHEMA', DB::getDatabaseName())
+            ->where('TABLE_NAME', $table)
+            ->where('CONSTRAINT_NAME', $constraint)
+            ->where('CONSTRAINT_TYPE', 'FOREIGN KEY')
+            ->exists();
     }
 };

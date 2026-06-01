@@ -10,6 +10,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -47,6 +48,20 @@ class SecurityPhase2Test extends TestCase
             'action' => 'PERMISSION_DENIED',
             'module' => 'authorization',
         ]);
+    }
+
+    public function test_database_admin_role_can_access_demanda_operational_dashboard_without_legacy_session_profile(): void
+    {
+        $user = $this->createSecurityUser('operador', 'Operador');
+        $adminRole = Role::where('name', 'admin')->firstOrFail();
+        $user->roles()->sync([$adminRole->id]);
+
+        Route::get('/_test/demanda-perfil-admin', fn () => response('ok'))
+            ->middleware(['auth', 'demanda.perfil:operacional']);
+
+        $this->actingAs($user);
+
+        $this->get('/_test/demanda-perfil-admin')->assertOk();
     }
 
     public function test_security_headers_are_applied(): void
