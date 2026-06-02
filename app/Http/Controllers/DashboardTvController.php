@@ -25,6 +25,7 @@ class DashboardTvController extends Controller
         $inicioDia = $hoje->copy()->startOfDay();
         $fimDia = $hoje->copy()->endOfDay();
         $inicioMes = $hoje->copy()->startOfMonth();
+        $fimMes = $hoje->copy()->endOfDay();
 
         $base = Demanda::query()->where('possui_sobra', true);
         $baseHoje = (clone $base)->whereDate('created_at', $hoje->toDateString());
@@ -85,6 +86,7 @@ class DashboardTvController extends Controller
             ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
             ->where('d.possui_sobra', true)
             ->whereNotNull('dd.finalizado_em')
+            ->whereBetween('dd.finalizado_em', [$inicioMes, $fimMes])
             ->whereNotNull('dd.separador_nome')
             ->whereRaw("TRIM(dd.separador_nome) <> ''")
             ->selectRaw('dd.separador_nome as nome, SUM(COALESCE(dd.quantidade_pecas, 0)) as total')
@@ -161,6 +163,7 @@ class DashboardTvController extends Controller
             'parciaisDia' => $parciaisDia,
             'turnoLabels' => $turnos->pluck('turno')->values(),
             'turnoValues' => $turnos->pluck('total')->values(),
+            'periodoMesLabel' => $inicioMes->format('d/m/Y') . ' a ' . $hoje->format('d/m/Y'),
         ];
     }
 

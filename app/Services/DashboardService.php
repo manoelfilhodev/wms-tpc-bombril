@@ -156,14 +156,15 @@ class DashboardService
 
     public function getRankingOperadores(): array
     {
-        $hoje   = Carbon::today();
-        $inicio = $hoje->copy()->subDays(6);
+        $hoje = Carbon::today();
+        $inicio = $hoje->copy()->startOfMonth();
+        $fim = $hoje->copy()->endOfDay();
 
         // Armazenagem
         $armazenagem = DB::table('_tb_armazenagem as a')
             ->join('_tb_usuarios as u', 'a.usuario_id', '=', 'u.id_user')
             ->select('u.nome', DB::raw('SUM(a.quantidade) as total'))
-            ->whereBetween('a.data_armazenagem', [$inicio, $hoje])
+            ->whereBetween('a.data_armazenagem', [$inicio, $fim])
             ->groupBy('u.nome')
             ->orderByDesc('total')
             ->limit(5)
@@ -179,7 +180,7 @@ class DashboardService
         $separacao = DB::table('_tb_separacao_itens as s')
             ->join('_tb_usuarios as u', 's.coletado_por', '=', 'u.id_user')
             ->select('u.nome', DB::raw('SUM(s.quantidade_separada) as total'))
-            ->whereBetween('s.data_separacao', [$inicio, now()])
+            ->whereBetween('s.data_separacao', [$inicio, $fim])
             ->groupBy('u.nome')
             ->orderByDesc('total')
             ->limit(5)
@@ -327,11 +328,15 @@ class DashboardService
 
     public function getAcuracidadeMensal()
     {
+        $inicioMes = Carbon::today()->startOfMonth();
+        $fimHoje = Carbon::today()->endOfDay();
+
         return DB::table('_tb_inventario_itens')
             ->selectRaw('DATE(updated_at) as dia, 
                          SUM(CASE WHEN quantidade_fisica = quantidade_sistema THEN 1 ELSE 0 END) as corretos,
                          COUNT(*) as total')
             ->whereNotNull('updated_at')
+            ->whereBetween('updated_at', [$inicioMes, $fimHoje])
             ->groupBy('dia')
             ->orderBy('dia')
             ->get()

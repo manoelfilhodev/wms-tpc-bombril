@@ -2,30 +2,198 @@
 
 @section('content')
 <style>
-  body { background: #070b14; color: #e8eefc; font-family: "Segoe UI", sans-serif; overflow: hidden; }
-  .tv-header { height: 10vh; display:flex; align-items:center; justify-content:center; background:#05070d; border-bottom:1px solid rgba(255,255,255,.08); }
-  .tv-header h1 { margin:0; font-size:2rem; letter-spacing:.5px; }
-  #carousel { height: 90vh; position: relative; }
-  .slide { display:none; height:100%; padding:16px 24px; }
+  :root {
+    --tv-bg: #05070c;
+    --tv-surface: rgba(15, 23, 42, .88);
+    --tv-surface-strong: rgba(17, 24, 39, .96);
+    --tv-border: rgba(148, 163, 184, .16);
+    --tv-text: #f8fafc;
+    --tv-muted: #9ca3af;
+    --tv-soft: #cbd5e1;
+    --tv-accent: #ef4444;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background:
+      radial-gradient(circle at 15% 0%, rgba(239, 68, 68, .12), transparent 28%),
+      linear-gradient(180deg, #070b14 0%, var(--tv-bg) 52%, #03050a 100%);
+    color: var(--tv-text);
+    font-family: "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+
+  .tv-header {
+    height: 11vh;
+    min-height: 92px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 24px;
+    padding: 18px 32px;
+    background: rgba(3, 5, 10, .88);
+    border-bottom:1px solid var(--tv-border);
+  }
+  .tv-title-kicker {
+    color: var(--tv-muted);
+    font-size: .8rem;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+  .tv-header h1 {
+    margin: 3px 0 0;
+    color: var(--tv-text);
+    font-size: clamp(1.7rem, 2.5vw, 2.6rem);
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+  .tv-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .tv-pill {
+    border: 1px solid var(--tv-border);
+    background: rgba(15, 23, 42, .72);
+    border-radius: 999px;
+    color: var(--tv-soft);
+    font-size: .9rem;
+    font-weight: 800;
+    padding: 9px 13px;
+    white-space: nowrap;
+  }
+  .tv-pill strong { color: #fff; }
+  .tv-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tv-live::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--tv-accent);
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, .14);
+  }
+
+  #carousel { height: 89vh; position: relative; }
+  .slide { display:none; height:100%; padding:18px 24px 24px; }
   .slide.active { display:block; }
   .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px; }
-  .kpi { background:linear-gradient(180deg,#111a2d,#0b1322); border:1px solid rgba(255,255,255,.07); border-radius:12px; padding:14px; }
-  .kpi .label { color:#9db0d2; font-size:.9rem; }
-  .kpi .value { font-size:2rem; font-weight:700; }
-  .kpi .backlog { margin-top:6px; color:#7f91b4; font-size:.78rem; }
-  .kpi .backlog strong { color:#b9c6de; font-size:.9rem; }
-  .panel { background:linear-gradient(180deg,#10192b,#0a1220); border:1px solid rgba(255,255,255,.07); border-radius:12px; padding:12px; height: calc(100% - 10px); }
-  .panel h3 { margin:2px 0 10px; font-size:1.1rem; color:#c9d7f2; }
+  .kpi {
+    min-height: 116px;
+    background: linear-gradient(180deg, rgba(17, 24, 39, .96), rgba(8, 13, 24, .96));
+    border: 1px solid var(--tv-border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    box-shadow: 0 16px 38px rgba(0, 0, 0, .22);
+  }
+  .kpi .label {
+    color: var(--tv-soft);
+    font-size: .88rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .kpi .value {
+    margin-top: 4px;
+    color: #fff;
+    font-size: clamp(2rem, 3vw, 3.2rem);
+    font-weight: 900;
+    line-height: 1;
+  }
+  .kpi .backlog { margin-top:10px; color:var(--tv-muted); font-size:.86rem; font-weight: 700; }
+  .kpi .backlog strong { color:#e5e7eb; font-size:1rem; }
+  .panel {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(180deg, var(--tv-surface), rgba(8, 13, 24, .94));
+    border: 1px solid var(--tv-border);
+    border-radius: 8px;
+    padding: 18px;
+    height: calc(100% - 10px);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, .28);
+  }
+  .panel::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 2px;
+    background: linear-gradient(90deg, var(--tv-accent), rgba(203, 213, 225, .25), transparent);
+    opacity: .85;
+  }
+  .panel h3 {
+    margin: 0 0 14px;
+    color: #f1f5f9;
+    font-size: clamp(1.05rem, 1.35vw, 1.45rem);
+    font-weight: 850;
+    letter-spacing: 0;
+  }
+  .panel .panel-subtitle {
+    color: var(--tv-muted);
+    display: block;
+    font-size: .9rem;
+    font-weight: 700;
+    margin-top: 3px;
+  }
   .panel canvas { height: 60vh !important; }
   .mini-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; height:70vh; }
   .mini-grid .panel canvas { height: 28vh !important; }
-  .slide-nav { position:absolute; top:50%; transform:translateY(-50%); background:rgba(0,0,0,.45); color:#fff; border:0; font-size:2rem; width:48px; height:64px; cursor:pointer; }
+  .slide-nav {
+    position:absolute;
+    top:50%;
+    transform:translateY(-50%);
+    background: rgba(3, 5, 10, .78);
+    color:#fff;
+    border: 1px solid rgba(255, 255, 255, .14);
+    font-size:2rem;
+    width:48px;
+    height:64px;
+    cursor:pointer;
+  }
   #prev-slide { left:0; border-radius:0 8px 8px 0; }
   #next-slide { right:0; border-radius:8px 0 0 8px; }
+  .slide-progress {
+    position:absolute;
+    left:50%;
+    bottom: 10px;
+    transform:translateX(-50%);
+    display:flex;
+    gap: 8px;
+  }
+  .slide-dot {
+    width: 28px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, .24);
+  }
+  .slide-dot.active { background: var(--tv-accent); }
+
+  @media (max-width: 1100px) {
+    body { overflow: auto; }
+    .tv-header { height: auto; min-height: 0; align-items: flex-start; flex-direction: column; }
+    #carousel { height: auto; min-height: 89vh; }
+    .slide { min-height: 89vh; }
+    .grid, .mini-grid { grid-template-columns: 1fr 1fr; height: auto; }
+    .mini-grid .panel { min-height: 340px; }
+    .panel canvas, .mini-grid .panel canvas { height: 300px !important; }
+  }
 </style>
 
 <div class="tv-header">
-  <h1>Painel TV • Separação Picking</h1>
+  <div>
+    <div class="tv-title-kicker">Operação WMS</div>
+    <h1>Painel TV • Separação Picking</h1>
+  </div>
+  <div class="tv-header-meta">
+    <span class="tv-pill tv-live">Ao vivo</span>
+    <span class="tv-pill">Mês corrente: <strong>{{ $periodoMesLabel }}</strong></span>
+    <span class="tv-pill">Atualizado: <strong>{{ now()->format('H:i') }}</strong></span>
+  </div>
 </div>
 
 <div id="carousel">
@@ -39,7 +207,7 @@
     <div class="mini-grid">
       <div class="panel"><h3>Status do dia</h3><canvas id="miniStatus"></canvas></div>
       <div class="panel"><h3>Top separadores do dia</h3><canvas id="miniRanking"></canvas></div>
-      <div class="panel"><h3>Finalizações no mês (acumulado)</h3><canvas id="miniMes"></canvas></div>
+      <div class="panel"><h3>Finalizações no mês corrente<span class="panel-subtitle">{{ $periodoMesLabel }}</span></h3><canvas id="miniMes"></canvas></div>
       <div class="panel"><h3>Volume por turno do dia</h3><canvas id="miniTurno"></canvas></div>
     </div>
   </section>
@@ -53,7 +221,7 @@
   </section>
 
   <section class="slide">
-    <div class="panel"><h3>Peças separadas por colaborador acumulado</h3><canvas id="chartPecasColaboradorAcumulado"></canvas></div>
+    <div class="panel"><h3>Peças separadas por colaborador no mês corrente<span class="panel-subtitle">{{ $periodoMesLabel }}</span></h3><canvas id="chartPecasColaboradorAcumulado"></canvas></div>
   </section>
 
   <section class="slide">
@@ -61,7 +229,7 @@
   </section>
 
   <section class="slide">
-    <div class="panel"><h3>Finalizações por dia no mês (acumulado)</h3><canvas id="chartMes"></canvas></div>
+    <div class="panel"><h3>Finalizações por dia no mês corrente<span class="panel-subtitle">{{ $periodoMesLabel }}</span></h3><canvas id="chartMes"></canvas></div>
   </section>
 
   <section class="slide">
@@ -70,11 +238,11 @@
 
   <button id="prev-slide" class="slide-nav">&#8249;</button>
   <button id="next-slide" class="slide-nav">&#8250;</button>
+  <div class="slide-progress" aria-hidden="true"></div>
 </div>
 @endsection
 
 @section('scripts')
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 <script nonce="{{ $cspNonce ?? '' }}">
 const statusData = {!! json_encode([
   (int) ($status['a_separar'] ?? 0),
@@ -92,30 +260,34 @@ const separacoesDia = @json($separacoesDia);
 const parciaisDia = @json($parciaisDia);
 const turnoLabels = @json($turnoLabels);
 const turnoValues = @json($turnoValues);
-const showValue = (value) => Number(value) > 0 ? value : '';
+const formatNumber = (value) => Number(value || 0).toLocaleString('pt-BR');
+const shortLabel = (label, max = 28) => {
+  const text = String(label || '');
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+};
 
 const baseOpts = {
   responsive: true,
   maintainAspectRatio: false,
   animation: false,
   plugins: {
-    legend: { position: 'bottom', labels: { color: '#d3ddf4' } },
+    legend: { position: 'bottom', labels: { color: '#d3ddf4', font: { weight: '700' } } },
     datalabels: {
       color: '#f8fbff',
-      font: { weight: '700', size: 11 },
+      font: { weight: '800', size: 12 },
       anchor: 'end',
       align: 'top',
-      formatter: showValue
+      formatter: (value) => Number(value) > 0 ? formatNumber(value) : ''
     },
     tooltip: {
       callbacks: {
-        label: (ctx) => `${ctx.dataset.label || 'Valor'}: ${ctx.parsed.y ?? ctx.raw}`
+        label: (ctx) => `${ctx.dataset.label || 'Valor'}: ${formatNumber(ctx.parsed.x ?? ctx.parsed.y ?? ctx.raw)}`
       }
     }
   },
   scales: {
-    x: { title: { display: true, text: 'Período/Operador', color: '#9db0d2' }, ticks: { color: '#c2d0ed' }, grid: { color: 'rgba(255,255,255,.08)' } },
-    y: { title: { display: true, text: 'Quantidade', color: '#9db0d2' }, ticks: { color: '#c2d0ed' }, grid: { color: 'rgba(255,255,255,.08)' }, beginAtZero: true }
+    x: { title: { display: true, text: 'Período/Operador', color: '#9db0d2' }, ticks: { color: '#cbd5e1', font: { weight: '700' } }, grid: { color: 'rgba(148,163,184,.12)' } },
+    y: { title: { display: true, text: 'Quantidade', color: '#9db0d2' }, ticks: { color: '#cbd5e1', font: { weight: '700' }, callback: (value) => formatNumber(value) }, grid: { color: 'rgba(148,163,184,.12)' }, beginAtZero: true }
   }
 };
 
@@ -123,13 +295,13 @@ function mk(id, cfg){ new Chart(document.getElementById(id), { ...cfg, plugins: 
 
 mk('miniStatus', {
   type:'doughnut',
-  data:{ labels:['A separar','Separando','Parcial','Completo'], datasets:[{ data:statusData, backgroundColor:['#38bdf8','#f59e0b','#fb7185','#22c55e'] }] },
+  data:{ labels:['A separar','Separando','Parcial','Completo'], datasets:[{ data:statusData, backgroundColor:['#94a3b8','#ef4444','#f59e0b','#22c55e'], borderColor:'#0f172a', borderWidth:3 }] },
   options:{
     responsive:true,
     maintainAspectRatio:false,
     animation:false,
     plugins:{
-      legend:{ position:'bottom', labels:{ color:'#d3ddf4' }},
+      legend:{ position:'bottom', labels:{ color:'#d3ddf4', font: { weight: '700' } }},
       datalabels:{
         color:'#ffffff',
         formatter: (value, ctx) => {
@@ -141,15 +313,15 @@ mk('miniStatus', {
     }
   }
 });
-mk('miniRanking', { type:'bar', data:{ labels:rankingLabels, datasets:[{ label:'Peças', data:rankingValues, backgroundColor:'#60a5fa' }] }, options:baseOpts });
-mk('miniMes', { type:'line', data:{ labels:diasMes, datasets:[{ label:'Finalizadas', data:separacoesDia, borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.2)', fill:true, tension:.25 },{ label:'Parciais', data:parciaisDia, borderColor:'#fb7185', backgroundColor:'rgba(251,113,133,.2)', fill:true, tension:.25 }] }, options:baseOpts });
-mk('miniTurno', { type:'bar', data:{ labels:turnoLabels, datasets:[{ label:'DTs finalizadas hoje', data:turnoValues, backgroundColor:['#38bdf8','#818cf8','#f59e0b'] }] }, options:baseOpts });
+mk('miniRanking', { type:'bar', data:{ labels:rankingLabels, datasets:[{ label:'Peças', data:rankingValues, backgroundColor:'#e5e7eb' }] }, options:baseOpts });
+mk('miniMes', { type:'line', data:{ labels:diasMes, datasets:[{ label:'Finalizadas no mês', data:separacoesDia, borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.18)', fill:true, tension:.25 },{ label:'Parciais no mês', data:parciaisDia, borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.14)', fill:true, tension:.25 }] }, options:baseOpts });
+mk('miniTurno', { type:'bar', data:{ labels:turnoLabels, datasets:[{ label:'DTs finalizadas hoje', data:turnoValues, backgroundColor:['#e5e7eb','#ef4444','#94a3b8'] }] }, options:baseOpts });
 
 mk('chartRanking', {
   type:'bar',
   data:{
     labels:rankingLabels,
-    datasets:[{ label:'Peças distribuídas', data:rankingValues, backgroundColor:'#3b82f6' }]
+    datasets:[{ label:'Peças distribuídas', data:rankingValues, backgroundColor:'#e5e7eb' }]
   },
   options:{
     ...baseOpts,
@@ -161,7 +333,8 @@ mk('chartRanking', {
       },
       y: {
         ...baseOpts.scales.x,
-        title: { display: true, text: 'Separador', color: '#9db0d2' }
+        title: { display: true, text: 'Separador', color: '#9db0d2' },
+        ticks: { ...baseOpts.scales.x.ticks, callback: function(value) { return shortLabel(this.getLabelForValue(value), 34); } }
       }
     },
     plugins: {
@@ -171,7 +344,7 @@ mk('chartRanking', {
         font:{ weight:'700', size:12 },
         anchor:'end',
         align:'right',
-        formatter:showValue
+        formatter:(value) => Number(value) > 0 ? formatNumber(value) : ''
       }
     }
   }
@@ -180,7 +353,7 @@ mk('chartPecasColaboradorDia', {
   type:'bar',
   data:{
     labels:pecasColaborador.dia.labels,
-    datasets:[{ label:'Hoje', data:pecasColaborador.dia.values, backgroundColor:'#38bdf8', maxBarThickness:40 }]
+    datasets:[{ label:'Hoje', data:pecasColaborador.dia.values, backgroundColor:'#e5e7eb', maxBarThickness:40 }]
   },
   options:{
     ...baseOpts,
@@ -192,7 +365,8 @@ mk('chartPecasColaboradorDia', {
       },
       y: {
         ...baseOpts.scales.x,
-        title: { display: true, text: 'Colaborador', color: '#9db0d2' }
+        title: { display: true, text: 'Colaborador', color: '#9db0d2' },
+        ticks: { ...baseOpts.scales.x.ticks, callback: function(value) { return shortLabel(this.getLabelForValue(value), 34); } }
       }
     },
     plugins: {
@@ -202,7 +376,7 @@ mk('chartPecasColaboradorDia', {
         font:{ weight:'700', size:12 },
         anchor:'end',
         align:'right',
-        formatter:showValue
+        formatter:(value) => Number(value) > 0 ? formatNumber(value) : ''
       }
     }
   }
@@ -211,7 +385,7 @@ mk('chartPecasColaboradorAcumulado', {
   type:'bar',
   data:{
     labels:pecasColaborador.acumulado.labels,
-    datasets:[{ label:'Acumulado', data:pecasColaborador.acumulado.values, backgroundColor:'#64748b', maxBarThickness:40 }]
+    datasets:[{ label:'Mês corrente', data:pecasColaborador.acumulado.values, backgroundColor:'#ef4444', maxBarThickness:40 }]
   },
   options:{
     ...baseOpts,
@@ -223,7 +397,8 @@ mk('chartPecasColaboradorAcumulado', {
       },
       y: {
         ...baseOpts.scales.x,
-        title: { display: true, text: 'Colaborador', color: '#9db0d2' }
+        title: { display: true, text: 'Colaborador', color: '#9db0d2' },
+        ticks: { ...baseOpts.scales.x.ticks, callback: function(value) { return shortLabel(this.getLabelForValue(value), 34); } }
       }
     },
     plugins: {
@@ -233,7 +408,7 @@ mk('chartPecasColaboradorAcumulado', {
         font:{ weight:'700', size:12 },
         anchor:'end',
         align:'right',
-        formatter:showValue
+        formatter:(value) => Number(value) > 0 ? formatNumber(value) : ''
       }
     }
   }
@@ -254,7 +429,8 @@ mk('chartRankingSkus', {
       },
       y: {
         ...baseOpts.scales.x,
-        title: { display: true, text: 'Picker', color: '#9db0d2' }
+        title: { display: true, text: 'Picker', color: '#9db0d2' },
+        ticks: { ...baseOpts.scales.x.ticks, callback: function(value) { return shortLabel(this.getLabelForValue(value), 34); } }
       }
     },
     plugins: {
@@ -264,12 +440,12 @@ mk('chartRankingSkus', {
         font:{ weight:'700', size:12 },
         anchor:'end',
         align:'right',
-        formatter:showValue
+        formatter:(value) => Number(value) > 0 ? formatNumber(value) : ''
       }
     }
   }
 });
-mk('chartMes', { type:'line', data:{ labels:diasMes, datasets:[{ label:'Finalizadas', data:separacoesDia, borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.2)', fill:true, tension:.25 },{ label:'Parciais', data:parciaisDia, borderColor:'#fb7185', backgroundColor:'rgba(251,113,133,.2)', fill:true, tension:.25 }] }, options:baseOpts });
+mk('chartMes', { type:'line', data:{ labels:diasMes, datasets:[{ label:'Finalizadas no mês', data:separacoesDia, borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.18)', fill:true, tension:.25 },{ label:'Parciais no mês', data:parciaisDia, borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.14)', fill:true, tension:.25 }] }, options:baseOpts });
 mk('chartTurno', {
   type:'bar',
   data:{
@@ -277,7 +453,7 @@ mk('chartTurno', {
     datasets:[{
       label:'DTs finalizadas hoje',
       data:turnoValues,
-      backgroundColor:['#38bdf8','#818cf8','#f59e0b'],
+      backgroundColor:['#e5e7eb','#ef4444','#94a3b8'],
       maxBarThickness: 110
     }]
   },
@@ -291,7 +467,7 @@ mk('chartTurno', {
         font:{ weight:'700', size:14 },
         anchor:'end',
         align:'top',
-        formatter:showValue
+        formatter:(value) => Number(value) > 0 ? formatNumber(value) : ''
       }
     },
     scales: {
@@ -309,12 +485,26 @@ mk('chartTurno', {
 });
 
 const slides = document.querySelectorAll('.slide');
+const progress = document.querySelector('.slide-progress');
+slides.forEach(() => {
+  const dot = document.createElement('span');
+  dot.className = 'slide-dot';
+  progress.appendChild(dot);
+});
+const dots = document.querySelectorAll('.slide-dot');
 let i = 0;
-function show(n){ slides.forEach(s=>s.classList.remove('active')); slides[n].classList.add('active'); }
+function show(n){
+  slides.forEach(s=>s.classList.remove('active'));
+  dots.forEach(d=>d.classList.remove('active'));
+  slides[n].classList.add('active');
+  dots[n]?.classList.add('active');
+}
 function next(){ i = (i+1)%slides.length; show(i); }
 function prev(){ i = (i-1+slides.length)%slides.length; show(i); }
 document.getElementById('next-slide').addEventListener('click', next);
 document.getElementById('prev-slide').addEventListener('click', prev);
+show(i);
 setInterval(next, 25000);
+setTimeout(() => window.location.reload(), 5 * 60 * 1000);
 </script>
 @endsection

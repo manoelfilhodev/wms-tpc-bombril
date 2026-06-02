@@ -108,6 +108,22 @@ class DashboardProjecaoProdutividadeTest extends TestCase
             ->assertSee('"total":35', false);
     }
 
+    public function test_painel_tv_acumulado_de_colaborador_usa_somente_mes_corrente(): void
+    {
+        Carbon::setTestNow('2026-05-06 14:00:00');
+
+        $this->criarDemandaSeparada('DT-MES-ATUAL', 120, '2026-05-06 13:00:00', 'Separador Mensal');
+        $this->criarDemandaSeparada('DT-MES-ANTERIOR', 900, '2026-04-30 13:00:00', 'Separador Mensal');
+
+        $this->actingAs($this->createUser())
+            ->withSession(['tipo' => 'admin', 'nivel' => 'Admin'])
+            ->get(route('painel.tv.dados'))
+            ->assertOk()
+            ->assertJsonPath('pecasPorColaborador.acumulado.labels.0', 'Separador Mensal')
+            ->assertJsonPath('pecasPorColaborador.acumulado.values.0', 120)
+            ->assertJsonPath('periodoMesLabel', '01/05/2026 a 06/05/2026');
+    }
+
     private function criarDemandaSeparada(string $fo, int $quantidade, string $finalizadaEm, string $separadorNome = 'Separador Teste'): Demanda
     {
         $demanda = Demanda::create($this->demandaData($fo, $quantidade, [
