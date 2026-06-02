@@ -1033,6 +1033,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const chartCaixasHora = document.getElementById('chartCaixasHora');
     if (chartCaixasHora && dados.caixasPorHora) {
         new Chart(chartCaixasHora, {
+            type: 'bar',
             data: {
                 labels: dados.caixasPorHora.labels,
                 datasets: [
@@ -1083,6 +1084,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const chartCaixasDiaMes = document.getElementById('chartCaixasDiaMes');
     if (chartCaixasDiaMes && dados.caixasPorDiaMes) {
         new Chart(chartCaixasDiaMes, {
+            type: 'bar',
             data: {
                 labels: dados.caixasPorDiaMes.labels,
                 datasets: [
@@ -1133,6 +1135,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const chartCaixasOportunidadesDiaMes = document.getElementById('chartCaixasOportunidadesDiaMes');
     if (chartCaixasOportunidadesDiaMes && dados.caixasOportunidadesPorDiaMes) {
         new Chart(chartCaixasOportunidadesDiaMes, {
+            type: 'bar',
             data: {
                 labels: dados.caixasOportunidadesPorDiaMes.labels,
                 datasets: [
