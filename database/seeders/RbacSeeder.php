@@ -43,6 +43,7 @@ class RbacSeeder extends Seeder
             'permissions' => [
                 'demandas.view',
                 'demandas.edit',
+                'demandas.delete',
                 'recebimento.view',
                 'recebimento.edit',
                 'kits.view',

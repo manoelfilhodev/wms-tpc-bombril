@@ -99,6 +99,82 @@ class DemandaImportacaoDuplicadaTest extends TestCase
         ]);
     }
 
+    public function test_importacao_bloqueia_dt_existente_mesmo_com_espacos_na_base(): void
+    {
+        $this->actingAs($this->createUser())
+            ->withSession(['tipo' => 'admin', 'nivel' => 'Admin']);
+
+        Demanda::create([
+            'fo' => ' 251399004 ',
+            'cliente' => 'Cliente Original',
+            'transportadora' => 'Transportadora Original',
+            'tipo' => 'EXPEDICAO',
+            'status' => 'A_SEPARAR',
+        ]);
+
+        $this->post(route('demandas.import'), [
+            'planilha' => implode("\n", [
+                "Transporte\tMaterial\tSobra\tNome\tTransportadora\tUnid.medida básica\tTexto breve material",
+                "251399004\t000123\t50\tCliente Novo\tTransportadora Nova\tCX\tItem duplicado",
+            ]),
+        ])->assertSessionHas('error');
+
+        $this->assertDatabaseCount('_tb_demanda', 1);
+        $this->assertDatabaseMissing('_tb_demanda_itens', [
+            'sku' => '000123',
+        ]);
+    }
+
+    public function test_importacao_ignora_sku_repetido_na_mesma_dt_para_nao_duplicar_quantidade(): void
+    {
+        $this->actingAs($this->createUser())
+            ->withSession(['tipo' => 'admin', 'nivel' => 'Admin']);
+
+        $this->post(route('demandas.import'), [
+            'planilha' => implode("\n", [
+                "Transporte\tMaterial\tSobra\tNome\tTransportadora\tUnid.medida básica\tTexto breve material",
+                "251399005\t000123\t50\tCliente Novo\tTransportadora Nova\tCX\tItem repetido",
+                "251399005\t123\t50\tCliente Novo\tTransportadora Nova\tCX\tItem repetido",
+                "251399005\t000456\t25\tCliente Novo\tTransportadora Nova\tCX\tItem novo",
+            ]),
+        ])->assertSessionHas('success', function (string $mensagem) {
+            return str_contains($mensagem, 'Itens repetidos ignorados na planilha: 1');
+        });
+
+        $demanda = Demanda::where('fo', '251399005')->firstOrFail();
+
+        $this->assertSame(2, DemandaItem::where('demanda_id', $demanda->id)->count());
+        $this->assertSame(75.0, (float) DemandaItem::where('demanda_id', $demanda->id)->sum('sobra'));
+        $this->assertDatabaseHas('_tb_demanda', [
+            'id' => $demanda->id,
+            'total_itens' => 2,
+            'total_itens_com_sobra' => 2,
+            'possui_sobra' => true,
+        ]);
+    }
+
+    public function test_cadastro_manual_bloqueia_dt_ja_existente(): void
+    {
+        $this->actingAs($this->createUser())
+            ->withSession(['tipo' => 'admin', 'nivel' => 'Admin']);
+
+        Demanda::create([
+            'fo' => '251399006',
+            'cliente' => 'Cliente Original',
+            'transportadora' => 'Transportadora Original',
+            'tipo' => 'EXPEDICAO',
+            'status' => 'A_SEPARAR',
+        ]);
+
+        $this->post(route('demandas.store'), [
+            'fo' => ' 251399006 ',
+            'cliente' => 'Cliente Novo',
+            'tipo' => 'EXPEDICAO',
+        ])->assertSessionHas('error');
+
+        $this->assertDatabaseCount('_tb_demanda', 1);
+    }
+
     private function createUser(): User
     {
         $unidadeId = DB::table('_tb_unidades')->insertGetId([

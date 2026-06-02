@@ -87,6 +87,7 @@ class User extends Authenticatable
         $gestorPermissions = [
             'demandas.view',
             'demandas.edit',
+            'demandas.delete',
             'recebimento.view',
             'recebimento.edit',
             'kits.view',

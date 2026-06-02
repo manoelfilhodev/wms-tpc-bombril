@@ -214,6 +214,13 @@ class ExpedicaoOperadorAcessoTest extends TestCase
             'saida_veiculo_em' => now()->subMinutes(20),
         ]);
 
+        $this->criarProgramacaoComDemanda('FO-PREV-SAIDA-ONTEM-001', [
+            'separacao_finalizada_em' => now()->subDays(2),
+            'conferencia_finalizada_em' => now()->subDays(2)->addHour(),
+            'carregamento_finalizado_em' => now()->subDay()->subHour(),
+            'saida_veiculo_em' => now()->subDay(),
+        ]);
+
         $this->get(route('expedicao.previsibilidade.index'))
             ->assertOk()
             ->assertSee('FO-PREV-ATIVA-001')
@@ -221,6 +228,7 @@ class ExpedicaoOperadorAcessoTest extends TestCase
             ->assertSee('Com saída de veículo')
             ->assertSee('FO-PREV-FINAL-001')
             ->assertSee('FO-PREV-SAIDA-001')
+            ->assertDontSee('FO-PREV-SAIDA-ONTEM-001')
             ->assertSee('aguardando saída')
             ->assertSee('ciclo fechado');
     }

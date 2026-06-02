@@ -50,13 +50,18 @@ class StretchIdentificacaoAuditTest extends TestCase
             'unidade' => $operador->unidade_id,
         ]);
 
-        $this->get(route('demandas.identificacaoA4', [
+        $response = $this->get(route('demandas.identificacaoA4', [
             'tipo' => 'dt',
             'dt' => 'DT-PRINT-001',
             'pallets' => '12',
             'data' => '2026-05-19',
             'conferente' => 'Maria',
         ]))->assertOk();
+
+        $html = $response->getContent();
+        $this->assertSame(2, substr_count($html, 'class="id-copy"'));
+        $this->assertStringContainsString('height: 148.5mm;', $html);
+        $this->assertStringContainsString('box-sizing: border-box', $html);
 
         $this->post(route('demandas.identificacaoA4.auditPrint'), [
             'tipo' => 'dt',

@@ -17,6 +17,7 @@ use App\Services\Expedicao\CapacidadeOperacionalService;
 use App\Services\DashboardService;
 use App\Services\SystemLogService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 
@@ -179,8 +180,16 @@ class DemandaController extends Controller
             'tipo' => 'required|in:RECEBIMENTO,EXPEDICAO',
         ]);
 
+        $fo = $this->normalizarFo($request->input('fo'));
+
+        if ($this->demandaFoExiste($fo)) {
+            return back()
+                ->withInput()
+                ->with('error', "A DT {$fo} já existe no sistema. A demanda não foi criada novamente.");
+        }
+
         Demanda::create([
-            'fo' => $request->fo,
+            'fo' => $fo,
             'cliente' => $request->cliente,
             'transportadora' => $request->transportadora,
             'doca' => $request->doca,
@@ -225,9 +234,16 @@ class DemandaController extends Controller
         ]);
 
         $demanda = Demanda::findOrFail($id);
+        $fo = $this->normalizarFo($request->input('fo'));
+
+        if ($this->demandaFoExiste($fo, $demanda->id)) {
+            return back()
+                ->withInput()
+                ->with('error', "A DT {$fo} já existe no sistema. A demanda não foi atualizada.");
+        }
 
         $demanda->update([
-            'fo'              => $request->fo,
+            'fo'              => $fo,
             'cliente'         => $request->cliente,
             'transportadora'  => $request->transportadora,
             'doca'            => $request->doca,
@@ -248,12 +264,50 @@ class DemandaController extends Controller
     }
 
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        if (! $this->usuarioPodeExcluirDemanda()) {
+            abort(403, 'Apenas perfis admin ou gestor podem excluir DTs.');
+        }
+
+        $request->validate([
+            'password' => 'required|string',
+        ], [
+            'password.required' => 'Informe sua senha para confirmar a exclusão da DT.',
+        ]);
+
+        if (! Hash::check((string) $request->input('password'), (string) auth()->user()?->password)) {
+            return back()->with('error', 'Senha inválida. A DT não foi excluída.');
+        }
+
         $demanda = Demanda::findOrFail($id);
+        $oldValues = $demanda->only([
+            'id',
+            'fo',
+            'cliente',
+            'transportadora',
+            'tipo',
+            'status',
+            'possui_sobra',
+            'separacao_iniciada_em',
+            'separacao_finalizada_em',
+            'separacao_resultado',
+            'stage',
+        ]);
+
         $demanda->delete();
 
-        return redirect()->route('demandas.index')->with('success', 'Demanda excluída com sucesso!');
+        SystemLogService::record([
+            'module' => 'separacao',
+            'action' => 'demanda_excluida',
+            'description' => "DT {$oldValues['fo']} excluída.",
+            'entity_type' => 'demanda',
+            'entity_id' => $oldValues['id'],
+            'old_values' => $oldValues,
+            'new_values' => ['excluida' => true],
+        ]);
+
+        return back()->with('success', "DT {$oldValues['fo']} excluída com sucesso.");
     }
 
     public function export(Request $request)
@@ -334,31 +388,30 @@ class DemandaController extends Controller
         $resumoPorDt = [];
         $itensImportados = 0;
         $itensIgnoradosBloqueio = 0;
+        $itensIgnoradosDuplicidade = 0;
         $dtsIgnoradasDuplicidade = [];
+        $itensPlanilhaPorDtSku = [];
 
         $dtsDaPlanilha = collect($linhas)
             ->skip(1)
             ->map(function ($linha) use ($mapa) {
                 $colunas = preg_split("/\t+/", trim($linha));
-                return trim($colunas[$mapa['transporte']] ?? '');
+                return $this->normalizarFo($colunas[$mapa['transporte']] ?? '');
             })
             ->filter()
             ->unique()
             ->values();
 
-        $dtsExistentes = Demanda::query()
-            ->whereIn('fo', $dtsDaPlanilha)
-            ->pluck('fo')
-            ->all();
+        $dtsExistentes = $this->buscarDtsExistentesNormalizadas($dtsDaPlanilha);
 
-        DB::transaction(function () use ($linhas, $mapa, $dtsExistentes, &$resumoPorDt, &$itensImportados, &$itensIgnoradosBloqueio, &$dtsIgnoradasDuplicidade) {
+        DB::transaction(function () use ($linhas, $mapa, $dtsExistentes, &$resumoPorDt, &$itensImportados, &$itensIgnoradosBloqueio, &$itensIgnoradosDuplicidade, &$dtsIgnoradasDuplicidade, &$itensPlanilhaPorDtSku) {
             foreach ($linhas as $index => $linha) {
                 if ($index === 0 || trim($linha) === '') {
                     continue;
                 }
 
                 $colunas = preg_split("/\t+/", trim($linha));
-                $dt = trim($colunas[$mapa['transporte']] ?? '');
+                $dt = $this->normalizarFo($colunas[$mapa['transporte']] ?? '');
                 $skuOriginal = trim($colunas[$mapa['material']] ?? '');
 
                 if ($dt === '' || $skuOriginal === '') {
@@ -371,6 +424,14 @@ class DemandaController extends Controller
                 }
 
                 $skuNormalizado = $this->normalizarSku($skuOriginal);
+                $chaveDtSku = "{$dt}|{$skuNormalizado}";
+                if (isset($itensPlanilhaPorDtSku[$chaveDtSku])) {
+                    $itensIgnoradosDuplicidade++;
+                    continue;
+                }
+
+                $itensPlanilhaPorDtSku[$chaveDtSku] = true;
+
                 $isBloqueado = in_array($skuNormalizado, self::SKUS_BLOQUEADOS, true);
                 if ($isBloqueado) {
                     $itensIgnoradosBloqueio++;
@@ -430,8 +491,11 @@ class DemandaController extends Controller
         $sufixoDuplicidade = $totalDtsDuplicadas > 0
             ? " DTs ignoradas por já existirem: {$totalDtsDuplicadas}" . ($dtsDuplicadasTexto ? " ({$dtsDuplicadasTexto}" . ($totalDtsDuplicadas > 8 ? ', ...' : '') . ")." : '.')
             : '';
+        $sufixoItensDuplicados = $itensIgnoradosDuplicidade > 0
+            ? " Itens repetidos ignorados na planilha: {$itensIgnoradosDuplicidade}."
+            : '';
 
-        if ($itensImportados === 0 && $totalDtsDuplicadas > 0) {
+        if ($itensImportados === 0 && ($totalDtsDuplicadas > 0 || $itensIgnoradosDuplicidade > 0)) {
             SystemLogService::record([
                 'module' => 'importacao',
                 'action' => 'importacao_explosao_bloqueada',
@@ -439,6 +503,7 @@ class DemandaController extends Controller
                 'entity_type' => 'demanda',
                 'new_values' => [
                     'dts_duplicadas' => $totalDtsDuplicadas,
+                    'itens_duplicados' => $itensIgnoradosDuplicidade,
                     'amostra' => collect(array_keys($dtsIgnoradasDuplicidade))->sort()->take(20)->values()->all(),
                 ],
             ]);
@@ -457,6 +522,7 @@ class DemandaController extends Controller
             'new_values' => [
                 'itens_importados' => $itensImportados,
                 'itens_ignorados_bloqueio' => $itensIgnoradosBloqueio,
+                'itens_ignorados_duplicidade' => $itensIgnoradosDuplicidade,
                 'dts_com_sobra' => $dtsComSobra,
                 'dts_duplicadas' => $totalDtsDuplicadas,
             ],
@@ -464,7 +530,7 @@ class DemandaController extends Controller
 
         return back()->with(
             'success',
-            "Importação concluída. Itens válidos: {$itensImportados}. Itens bloqueados: {$itensIgnoradosBloqueio}. DTs com sobra: {$dtsComSobra}.{$sufixoDuplicidade}"
+            "Importação concluída. Itens válidos: {$itensImportados}. Itens bloqueados: {$itensIgnoradosBloqueio}. DTs com sobra: {$dtsComSobra}.{$sufixoDuplicidade}{$sufixoItensDuplicados}"
         );
     }
 
@@ -486,6 +552,40 @@ class DemandaController extends Controller
         $sku = preg_replace('/\D+/', '', (string) $sku);
         $sku = ltrim($sku, '0');
         return $sku === '' ? '0' : $sku;
+    }
+
+    private function normalizarFo(?string $fo): string
+    {
+        $fo = preg_replace('/[\s\x{00A0}]+/u', '', (string) $fo);
+        return mb_strtoupper(trim($fo));
+    }
+
+    private function demandaFoExiste(string $fo, ?int $ignorarId = null): bool
+    {
+        return Demanda::query()
+            ->when($ignorarId, fn($query) => $query->where('id', '!=', $ignorarId))
+            ->pluck('fo')
+            ->contains(fn($foExistente) => $this->normalizarFo($foExistente) === $fo);
+    }
+
+    private function buscarDtsExistentesNormalizadas($dtsDaPlanilha): array
+    {
+        $dts = collect($dtsDaPlanilha)
+            ->map(fn($dt) => $this->normalizarFo($dt))
+            ->filter()
+            ->flip();
+
+        if ($dts->isEmpty()) {
+            return [];
+        }
+
+        return Demanda::query()
+            ->pluck('fo')
+            ->map(fn($fo) => $this->normalizarFo($fo))
+            ->filter(fn($fo) => $dts->has($fo))
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function mapearCabecalho(array $cabecalho): array
@@ -977,6 +1077,17 @@ class DemandaController extends Controller
         }
 
         return Carbon::parse($demanda->separacao_iniciada_em)->gte(Demanda::DATA_OPERACIONAL_MINIMA);
+    }
+
+    private function usuarioPodeExcluirDemanda(): bool
+    {
+        $user = auth()->user();
+        $tipo = strtolower((string) ($user?->tipo ?? session('tipo')));
+        $nivel = strtolower((string) ($user?->nivel ?? session('nivel')));
+
+        return in_array($tipo, ['admin', 'gestor'], true)
+            || str_contains($nivel, 'admin')
+            || str_contains($nivel, 'gestor');
     }
 
     public function dashboardOperacional()

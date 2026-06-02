@@ -91,6 +91,11 @@
             </a>
         </div>
         <div>
+            <button type="button" class="btn btn-outline-light btn-sm d-flex align-items-center" id="toggle-dark-mode" title="Alternar tema">
+                <i class="mdi mdi-theme-light-dark me-1 fs-5"></i> Tema
+            </button>
+        </div>
+        <div>
             <form method="POST" action="{{ route('logout') }}" class="m-0">
                 @csrf
                 <button type="submit" class="btn btn-outline-light btn-sm d-flex align-items-center" title="Sair do sistema">
@@ -119,12 +124,40 @@
     <script src="{{ asset('assets/js/vendor.min.js') }}"></script>
     <script src="{{ asset('assets/js/app.min.js') }}"></script>
     <script>
-        localStorage.setItem('data-layout-config', JSON.stringify({
-            leftSideBarTheme: 'dark',
-            layoutBoxed: false,
-            leftSidebarCondensed: false,
-            darkMode: true
-        }));
+        document.addEventListener('DOMContentLoaded', function () {
+            const storedTheme = localStorage.getItem('darkMode') !== 'false';
+            const html = document.documentElement;
+            const body = document.body;
+            const lightStyle = document.getElementById('light-style');
+            const darkStyle = document.getElementById('dark-style');
+            const defaultConfig = {
+                leftSideBarTheme: 'dark',
+                layoutBoxed: false,
+                leftSidebarCondensed: false,
+                darkMode: true
+            };
+
+            function applyTheme(isDark) {
+                const config = { ...defaultConfig, darkMode: isDark };
+                const serialized = JSON.stringify(config);
+                localStorage.setItem('data-layout-config', serialized);
+                html.setAttribute('data-layout-config', serialized);
+                body.setAttribute('data-layout-config', serialized);
+                html.setAttribute('data-theme', isDark ? 'dark' : 'light');
+                body.setAttribute('data-theme', isDark ? 'dark' : 'light');
+
+                if (lightStyle) lightStyle.disabled = isDark;
+                if (darkStyle) darkStyle.disabled = !isDark;
+            }
+
+            applyTheme(storedTheme);
+
+            document.getElementById('toggle-dark-mode')?.addEventListener('click', function () {
+                const isDark = html.getAttribute('data-theme') !== 'dark';
+                localStorage.setItem('darkMode', String(isDark));
+                applyTheme(isDark);
+            });
+        });
     </script>
 
     <script>

@@ -100,6 +100,10 @@
             color: #f8fafc;
         }
 
+        .exp-ops-table > :not(caption) > * > * {
+            background: transparent;
+        }
+
         .exp-ops-table th {
             color: #cbd5e1;
             font-size: 12px;
@@ -212,6 +216,139 @@
 
         .icon-wrapper i {
             color: #fff !important;
+        }
+
+        [data-theme="light"] .exp-ops-page {
+            color: #172033;
+        }
+
+        [data-theme="light"] .exp-ops-page .text-dark,
+        [data-theme="light"] .exp-ops-page .text-white {
+            color: #172033 !important;
+        }
+
+        [data-theme="light"] .exp-ops-page .text-muted,
+        [data-theme="light"] .exp-ops-muted {
+            color: #5f6f86 !important;
+        }
+
+        [data-theme="light"] .exp-ops-filter,
+        [data-theme="light"] .exp-ops-table-wrap {
+            background: #ffffff;
+            border-color: rgba(15, 23, 42, .10);
+            box-shadow: 0 18px 42px rgba(15, 23, 42, .10);
+        }
+
+        [data-theme="light"] .exp-ops-filter {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        }
+
+        [data-theme="light"] .exp-ops-page .form-control,
+        [data-theme="light"] .exp-ops-page .form-select {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+            color: #0f172a;
+        }
+
+        [data-theme="light"] .exp-ops-page .form-control::placeholder {
+            color: #64748b;
+        }
+
+        [data-theme="light"] .exp-ops-page .form-control:focus,
+        [data-theme="light"] .exp-ops-page .form-select:focus {
+            background: #ffffff;
+            border-color: #2563eb;
+            color: #0f172a;
+            box-shadow: 0 0 0 .2rem rgba(37, 99, 235, .14);
+        }
+
+        [data-theme="light"] .exp-ops-page .form-select option {
+            background: #ffffff;
+            color: #0f172a;
+        }
+
+        [data-theme="light"] .exp-ops-page input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+            filter: none;
+        }
+
+        [data-theme="light"] .exp-ops-queue-card {
+            background: #f8fafc;
+            border-color: rgba(59, 130, 246, .18);
+        }
+
+        [data-theme="light"] .exp-ops-queue-card.done {
+            background: linear-gradient(135deg, rgba(22, 163, 74, .12), #ffffff);
+            border-color: rgba(22, 163, 74, .34);
+        }
+
+        [data-theme="light"] .exp-ops-queue-card.active {
+            background: linear-gradient(135deg, rgba(37, 99, 235, .12), #ffffff);
+            border-color: rgba(37, 99, 235, .34);
+        }
+
+        [data-theme="light"] .exp-ops-queue-card.waiting {
+            background: linear-gradient(135deg, rgba(217, 119, 6, .12), #ffffff);
+            border-color: rgba(217, 119, 6, .32);
+        }
+
+        [data-theme="light"] .exp-ops-queue-label {
+            color: #334155;
+        }
+
+        [data-theme="light"] .exp-ops-queue-value {
+            color: #0f172a;
+        }
+
+        [data-theme="light"] .exp-ops-queue-note {
+            color: #2563eb;
+        }
+
+        [data-theme="light"] .exp-ops-table {
+            color: #172033;
+        }
+
+        [data-theme="light"] .exp-ops-table thead th {
+            background: #e8eef7;
+            border-color: #d6deea;
+            color: #0f172a;
+        }
+
+        [data-theme="light"] .exp-ops-table td {
+            background: #ffffff;
+            border-color: #e2e8f0;
+            color: #172033;
+        }
+
+        [data-theme="light"] .exp-ops-table tbody tr:hover td {
+            background: #f8fafc;
+        }
+
+        [data-theme="light"] .exp-ops-dt {
+            color: #0f172a;
+        }
+
+        [data-theme="light"] .exp-ops-action-row .btn:disabled {
+            background: #f1f5f9;
+            border-color: #d6deea;
+            color: #8a97aa;
+        }
+
+        [data-theme="light"] .exp-ops-page .btn-outline-light {
+            border-color: #cbd5e1;
+            color: #334155;
+            background: #ffffff;
+        }
+
+        [data-theme="light"] .exp-ops-page .btn-outline-light:hover,
+        [data-theme="light"] .exp-ops-page .btn-outline-light:focus {
+            border-color: #2563eb;
+            color: #1d4ed8;
+            background: #eff6ff;
+        }
+
+        [data-theme="light"] .exp-ops-edit-panel {
+            background: #fffbeb;
+            border-color: rgba(217, 119, 6, .28);
         }
 
         @media (max-width: 992px) {

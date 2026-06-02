@@ -190,6 +190,8 @@
         box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
         display: flex;
         flex-direction: column;
+        box-sizing: border-box;
+        overflow: hidden;
     }
 
     .id-copy {
@@ -200,6 +202,7 @@
         align-items: stretch;
         justify-content: center;
         position: relative;
+        box-sizing: border-box;
     }
 
     .id-copy:first-child {
@@ -221,6 +224,7 @@
         font-weight: 900;
         color: #333;
         line-height: 1;
+        box-sizing: border-box;
     }
 
     .box-title,
@@ -247,6 +251,7 @@
         table-layout: fixed;
         font-family: Arial, Helvetica, sans-serif;
         font-weight: 900;
+        box-sizing: border-box;
     }
 
     .id-table th,
@@ -293,6 +298,15 @@
             background: #fff !important;
         }
 
+        html,
+        body {
+            width: 210mm !important;
+            height: 297mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+
         .no-print,
         .navbar-custom,
         .leftside-menu,
@@ -320,9 +334,15 @@
             width: 210mm !important;
             height: 297mm !important;
             box-shadow: none !important;
+            overflow: hidden !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
         }
 
         .id-copy {
+            width: 210mm !important;
+            height: 148.5mm !important;
+            box-sizing: border-box !important;
             break-inside: avoid;
             page-break-inside: avoid;
         }

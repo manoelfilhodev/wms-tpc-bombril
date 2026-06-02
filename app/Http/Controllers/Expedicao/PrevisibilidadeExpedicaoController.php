@@ -5,12 +5,11 @@ namespace App\Http\Controllers\Expedicao;
 use App\Http\Controllers\Controller;
 use App\Models\Demanda;
 use App\Models\Expedicao\ExpedicaoProgramacao;
-use App\Services\Expedicao\CapacidadeOperacionalService;
+use App\Models\Expedicao\ExpedicaoRota;
 use App\Services\Expedicao\PrevisaoExpedicaoService;
 use App\Services\Expedicao\ValidacaoOperacionalService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class PrevisibilidadeExpedicaoController extends Controller
@@ -332,17 +331,24 @@ class PrevisibilidadeExpedicaoController extends Controller
             return $programacao;
         });
 
+        $hoje = now()->toDateString();
+        $programacoes = $programacoes
+            ->reject(function ($programacao) use ($hoje) {
+                $saidaVeiculo = $this->dataOperacionalValida($programacao->demanda?->saida_veiculo_em ?? null);
+
+                return $saidaVeiculo && $saidaVeiculo->toDateString() !== $hoje;
+            })
+            ->values();
+
         $resumoFinalizadas = $this->montarResumoFinalizadas($programacoes);
+        $resumoOperacional = $this->montarResumoOperacional($programacoes, $resumoFinalizadas);
         $programacoes = $programacoes
             ->reject(fn ($programacao) => (bool) $programacao->carregamento_concluido)
             ->values();
 
-        $resumoOperacional = $this->montarResumoOperacional($programacoes);
-        $capacidadeOperacional = app(CapacidadeOperacionalService::class)->analisar(now());
-
         return view(
             'expedicao.previsibilidade.index',
-            compact('programacoes', 'resumoOperacional', 'capacidadeOperacional', 'tipoDemanda', 'resumoFinalizadas')
+            compact('programacoes', 'resumoOperacional', 'tipoDemanda', 'resumoFinalizadas')
         );
     }
 
@@ -373,14 +379,20 @@ class PrevisibilidadeExpedicaoController extends Controller
         }
 
         if ($previsao->status === 'CALCULADO' && $previsao->tempo_viagem_min !== null) {
-            $tempoRotaAtual = DB::table('_tb_expedicao_rotas')
+            $cidadeOrigem = $this->normalizarTexto(config('services.expedicao_rotas.origin_city', 'Sao Bernardo do Campo'));
+            $cidadeDestino = $this->normalizarTexto($programacao->cidade_destino);
+
+            $rota = ExpedicaoRota::query()
                 ->where('ativo', true)
-                ->where('cidade_origem', config('services.expedicao_rotas.origin_city', 'Sao Bernardo do Campo'))
                 ->where('uf_origem', config('services.expedicao_rotas.origin_uf', 'SP'))
-                ->where('cidade_destino', $programacao->cidade_destino)
                 ->where('uf_destino', $programacao->uf_destino)
-                ->selectRaw('COALESCE(tempo_operacional_minutos, tempo_api_minutos) as tempo_viagem_min')
-                ->value('tempo_viagem_min');
+                ->get()
+                ->first(function (ExpedicaoRota $rota) use ($cidadeOrigem, $cidadeDestino) {
+                    return $this->normalizarTexto($rota->cidade_origem) === $cidadeOrigem
+                        && $this->normalizarTexto($rota->cidade_destino) === $cidadeDestino;
+                });
+
+            $tempoRotaAtual = app(PrevisaoExpedicaoService::class)->tempoViagemOperacionalCaminhao($rota);
 
             return $tempoRotaAtual === null || (int) $tempoRotaAtual !== (int) $previsao->tempo_viagem_min;
         }
@@ -391,7 +403,15 @@ class PrevisibilidadeExpedicaoController extends Controller
             && $previsao->tempo_carregamento_min === null;
     }
 
-    private function montarResumoOperacional($programacoes): array
+    private function normalizarTexto(?string $valor): string
+    {
+        $valor = trim((string) $valor);
+        $valor = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $valor) ?: $valor;
+
+        return strtoupper($valor);
+    }
+
+    private function montarResumoOperacional($programacoes, array $resumoFinalizadas): array
     {
         $total = $programacoes->count();
         $programadas = $programacoes->where('tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA);
@@ -418,60 +438,74 @@ class PrevisibilidadeExpedicaoController extends Controller
             ->filter(fn ($programacao) => in_array($programacao->status_operacional, $status, true))
             ->count();
 
+        $executadasTotal = $programadasExecutadas + $oportunidadesExecutadas;
+        $riscoTotal = $programadasRisco + $oportunidadesRisco;
+        $atrasadas = $countStatus(['ATRASADO']);
+        $aguardandoSaida = (int) data_get($resumoFinalizadas, 'carregadas.total', 0);
+        $saidasHoje = (int) data_get($resumoFinalizadas, 'com_saida.total', 0);
+
         $cards = [
             [
-                'titulo' => 'Demanda Programada',
-                'valor' => $programadas->count(),
-                'percentual' => $this->percentualResumo($programadasExecutadas, $programadas->count()),
-                'detalhe' => $programadasExecutadas . ' executadas | ' . max(0, $programadas->count() - $programadasExecutadas) . ' pendentes',
+                'titulo' => 'Demanda do Dia',
+                'valor' => $total,
+                'percentual' => $this->percentualResumo($executadasTotal, $total),
+                'detalhe' => $programadas->count() . ' programadas | ' . $oportunidades->count() . ' oportunidades',
                 'icone' => 'mdi-calendar-check-outline',
                 'classe' => 'neutral',
             ],
             [
-                'titulo' => 'Oportunidades',
-                'valor' => $oportunidades->count(),
-                'percentual' => $this->percentualResumo($oportunidadesExecutadas, $oportunidades->count()),
-                'detalhe' => $oportunidadesExecutadas . ' executadas | ganho operacional',
-                'icone' => 'mdi-trending-up',
-                'classe' => 'ok',
-            ],
-            [
-                'titulo' => 'Total Operado',
-                'valor' => $programadasExecutadas + $oportunidadesExecutadas,
-                'percentual' => $this->percentualResumo($programadasExecutadas + $oportunidadesExecutadas, $total),
-                'detalhe' => $programadasExecutadas . ' programadas | ' . $oportunidadesExecutadas . ' oportunidades',
+                'titulo' => 'Executadas',
+                'valor' => $executadasTotal,
+                'percentual' => $this->percentualResumo($executadasTotal, $total),
+                'detalhe' => 'Saída de veículo registrada hoje',
                 'icone' => 'mdi-truck-check-outline',
                 'classe' => 'ok',
             ],
             [
-                'titulo' => 'Risco Operacional',
-                'valor' => $programadasRisco + $oportunidadesRisco,
-                'percentual' => $this->percentualResumo($programadasRisco, max(1, $programadas->count())),
-                'detalhe' => $programadasRisco . ' programadas | ' . $oportunidadesRisco . ' oportunidades',
-                'icone' => 'mdi-alert-decagram-outline',
-                'classe' => ($programadasRisco + $oportunidadesRisco) > 0 ? 'warning' : 'neutral',
+                'titulo' => 'Pendentes',
+                'valor' => max(0, $total - $executadasTotal),
+                'percentual' => $this->percentualResumo(max(0, $total - $executadasTotal), $total),
+                'detalhe' => 'Ainda exigem acompanhamento',
+                'icone' => 'mdi-progress-clock',
+                'classe' => max(0, $total - $executadasTotal) > 0 ? 'warning' : 'ok',
             ],
             [
-                'titulo' => 'FO / DT',
-                'valor' => $total,
-                'percentual' => $this->percentualResumo($total, $total),
-                'detalhe' => 'Programações exibidas',
-                'icone' => 'mdi-format-list-numbered',
-                'classe' => 'neutral',
+                'titulo' => 'Em Risco',
+                'valor' => $riscoTotal,
+                'percentual' => $this->percentualResumo($riscoTotal, $total),
+                'detalhe' => $programadasRisco . ' programadas | ' . $oportunidadesRisco . ' oportunidades',
+                'icone' => 'mdi-alert-decagram-outline',
+                'classe' => $riscoTotal > 0 ? 'warning' : 'neutral',
+            ],
+            [
+                'titulo' => 'Atrasadas',
+                'valor' => $atrasadas,
+                'percentual' => $this->percentualResumo($atrasadas, $total),
+                'detalhe' => 'Fora do previsto',
+                'icone' => 'mdi-alert-circle-outline',
+                'classe' => $atrasadas > 0 ? 'danger' : 'ok',
+            ],
+            [
+                'titulo' => 'Saídas Hoje',
+                'valor' => $saidasHoje,
+                'percentual' => $this->percentualResumo($saidasHoje, $total),
+                'detalhe' => 'Ciclo fechado no dia',
+                'icone' => 'mdi-flag-checkered',
+                'classe' => 'ok',
             ],
             [
                 'titulo' => 'Separação',
                 'valor' => $countEtapa('separacao'),
                 'percentual' => $this->percentualResumo($countEtapa('separacao'), $total),
-                'detalhe' => 'Etapa executada',
-                'icone' => 'mdi-package-variant-closed-check',
+                'detalhe' => 'DTs já separadas',
+                'icone' => 'mdi-package-variant-closed',
                 'classe' => 'ok',
             ],
             [
                 'titulo' => 'Conferência',
                 'valor' => $countEtapa('conferencia'),
                 'percentual' => $this->percentualResumo($countEtapa('conferencia'), $total),
-                'detalhe' => 'Etapa executada',
+                'detalhe' => 'DTs já conferidas',
                 'icone' => 'mdi-clipboard-check-outline',
                 'classe' => 'ok',
             ],
@@ -479,58 +513,17 @@ class PrevisibilidadeExpedicaoController extends Controller
                 'titulo' => 'Carregamento',
                 'valor' => $countEtapa('carregamento'),
                 'percentual' => $this->percentualResumo($countEtapa('carregamento'), $total),
-                'detalhe' => 'Etapa executada',
-                'icone' => 'mdi-truck-cargo-container',
+                'detalhe' => 'DTs já carregadas',
+                'icone' => 'mdi-truck-outline',
                 'classe' => 'ok',
             ],
             [
-                'titulo' => 'Saída Prevista',
-                'valor' => $programacoes->filter(fn ($programacao) => $programacao->ultimaPrevisao?->previsao_saida_caminhao !== null)->count(),
-                'percentual' => $this->percentualResumo(
-                    $programacoes->filter(fn ($programacao) => $programacao->ultimaPrevisao?->previsao_saida_caminhao !== null)->count(),
-                    $total
-                ),
-                'detalhe' => 'Previsão calculada',
-                'icone' => 'mdi-calendar-check-outline',
-                'classe' => 'ok',
-            ],
-            [
-                'titulo' => 'Saída Projetada',
-                'valor' => $programacoes->filter(fn ($programacao) => $programacao->saida_projetada_em !== null)->count(),
-                'percentual' => $this->percentualResumo(
-                    $programacoes->filter(fn ($programacao) => $programacao->saida_projetada_em !== null)->count(),
-                    $total
-                ),
-                'detalhe' => 'Projeção disponível',
-                'icone' => 'mdi-clock-check-outline',
-                'classe' => 'ok',
-            ],
-            [
-                'titulo' => 'Status',
-                'valor' => $countStatus(['NO_PRAZO']),
-                'percentual' => $this->percentualResumo($countStatus(['NO_PRAZO']), $total),
-                'detalhe' => 'No prazo',
-                'icone' => 'mdi-check-decagram-outline',
-                'classe' => 'ok',
-            ],
-            [
-                'titulo' => 'Atenção',
-                'valor' => $countStatus(['ATENCAO', 'SEM_EXPLOSAO', 'SEM_ROTA', 'SEM_CRITERIO', 'ANOMALIA_OPERACIONAL']),
-                'percentual' => $this->percentualResumo(
-                    $countStatus(['ATENCAO', 'SEM_EXPLOSAO', 'SEM_ROTA', 'SEM_CRITERIO', 'ANOMALIA_OPERACIONAL']),
-                    $total
-                ),
-                'detalhe' => 'Exige acompanhamento',
-                'icone' => 'mdi-alert-circle-outline',
-                'classe' => 'warning',
-            ],
-            [
-                'titulo' => 'Atrasados',
-                'valor' => $countStatus(['ATRASADO']),
-                'percentual' => $this->percentualResumo($countStatus(['ATRASADO']), $total),
-                'detalhe' => 'Fora do previsto',
-                'icone' => 'mdi-truck-alert-outline',
-                'classe' => 'danger',
+                'titulo' => 'Aguardando Saída',
+                'valor' => $aguardandoSaida,
+                'percentual' => $this->percentualResumo($aguardandoSaida, $total),
+                'detalhe' => 'Carregadas sem saída',
+                'icone' => 'mdi-clock-outline',
+                'classe' => $aguardandoSaida > 0 ? 'warning' : 'ok',
             ],
         ];
 

@@ -78,9 +78,14 @@
                     @else
                         <div class="top-bar-operador">
                             <span>Systex WMS</span>
-                            <a href="{{ route('painel.operador') }}" class="btn btn-outline-light btn-sm">
-                                <i class="bi bi-arrow-left"></i> Voltar ao Inicio
-                            </a>
+                            <div class="d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-outline-light btn-sm" id="toggle-dark-mode" data-bs-container="body" data-bs-placement="bottom" data-bs-toggle="tooltip" title="Alternar tema">
+                                    <i class="mdi mdi-theme-light-dark me-1"></i> Tema
+                                </button>
+                                <a href="{{ route('painel.operador') }}" class="btn btn-outline-light btn-sm">
+                                    <i class="bi bi-arrow-left"></i> Voltar ao Inicio
+                                </a>
+                            </div>
                         </div>
                     @endif
                 @endauth

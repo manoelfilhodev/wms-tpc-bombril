@@ -58,7 +58,7 @@
                     #020812 100%);
             color: #fff;
             overflow-x: hidden;
-            overflow-y: hidden;
+            overflow-y: auto;
             min-height: 100vh;
         }
 
@@ -182,7 +182,7 @@
 
         .ops-board-layout {
             display: grid;
-            grid-template-columns: minmax(0, 8fr) minmax(520px, 4fr);
+            grid-template-columns: minmax(0, 8fr) minmax(clamp(360px, 28vw, 520px), 4fr);
             gap: clamp(8px, .9vw, 14px);
             height: 100%;
             min-height: 0;
@@ -198,6 +198,7 @@
 
         .ops-summary {
             padding: clamp(10px, 1.6vw, 20px) clamp(8px, 1.4vw, 16px) 0;
+            scrollbar-color: rgba(0, 174, 255, .42) rgba(255, 255, 255, .06);
         }
 
         .ops-summary-toolbar {
@@ -400,8 +401,16 @@
 
         .ops-summary-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: clamp(8px, .9vw, 14px);
+        }
+
+        .ops-summary-grid.executive {
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+        }
+
+        .ops-summary-grid.operational {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
         }
 
         .ops-summary-card {
@@ -475,10 +484,11 @@
 
         .summary-value {
             color: #fff;
-            font-size: clamp(26px, 2vw, 38px);
+            font-size: clamp(24px, 2vw, 38px);
             font-weight: 1000;
             line-height: .9;
-            overflow-wrap: anywhere;
+            overflow-wrap: normal;
+            word-break: normal;
         }
 
         .summary-percent {
@@ -1005,9 +1015,212 @@
             text-transform: uppercase;
         }
 
+        .ops-scroll-toggle {
+            border: 1px solid rgba(0, 174, 255, .34);
+            border-radius: 8px;
+            background:
+                linear-gradient(180deg, rgba(12, 28, 48, .98), rgba(4, 12, 22, .98));
+            color: #d7e3ef;
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: .04em;
+            line-height: 1;
+            padding: 9px 12px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .ops-scroll-toggle.is-paused {
+            border-color: rgba(255, 193, 7, .45);
+            color: #ffe08a;
+        }
+
+        @media (min-width: 1025px) {
+            .ops-summary {
+                max-height: clamp(280px, 42vh, 440px);
+                overflow-y: auto;
+                padding-bottom: 10px;
+            }
+
+            .ops-board-wrapper {
+                min-height: 340px;
+            }
+
+            .ops-summary-grid {
+                grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+                gap: 8px;
+            }
+
+            .ops-summary-card {
+                border-radius: 10px;
+                padding: 10px 12px;
+            }
+
+            .summary-head {
+                gap: 8px;
+            }
+
+            .summary-title {
+                font-size: 11px;
+            }
+
+            .summary-icon {
+                font-size: 22px;
+            }
+
+            .summary-value-row {
+                margin-top: 8px;
+            }
+
+            .summary-value {
+                font-size: clamp(24px, 1.7vw, 34px);
+                line-height: 1;
+            }
+
+            .summary-detail {
+                margin-top: 7px;
+                font-size: 11px;
+            }
+        }
+
+        @media (max-height: 940px) and (min-width: 1025px) {
+            .ops-topbar {
+                position: static;
+                padding-block: 10px;
+            }
+
+            .ops-airport-icon {
+                width: 54px;
+                height: 54px;
+                flex-basis: 54px;
+                font-size: 30px;
+            }
+
+            .ops-title {
+                font-size: clamp(30px, 2.4vw, 46px);
+                padding-bottom: 4px;
+            }
+
+            .ops-subtitle {
+                margin-top: 5px;
+            }
+
+            .ops-clock {
+                padding-block: 10px;
+            }
+
+            .ops-clock strong {
+                font-size: clamp(28px, 2.2vw, 38px);
+            }
+
+            .ops-summary {
+                padding-top: 10px;
+            }
+
+            .ops-summary-toolbar {
+                margin-bottom: 8px;
+            }
+
+            .ops-summary-grid {
+                grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
+                gap: 8px;
+            }
+
+            .ops-summary-card {
+                border-radius: 10px;
+                padding: 10px 12px;
+            }
+
+            .summary-value-row {
+                margin-top: 8px;
+            }
+
+            .summary-value {
+                font-size: clamp(24px, 1.6vw, 32px);
+            }
+
+            .summary-detail {
+                margin-top: 7px;
+            }
+
+            .flight-board-row {
+                min-height: 188px;
+            }
+
+            .stage-box {
+                min-height: 132px;
+                padding: 10px;
+            }
+
+            .stage-time {
+                margin-bottom: 8px;
+            }
+        }
+
         @media (min-width: 1420px) {
             .flight-board {
                 min-width: 0;
+            }
+        }
+
+        @media (max-width: 1366px) {
+            body.expedicao-tv-mode {
+                overflow-y: auto;
+            }
+
+            .ops-topbar {
+                position: static;
+            }
+
+            .ops-board-wrapper {
+                height: auto;
+                min-height: 0;
+                overflow: visible;
+                padding-bottom: calc(var(--ops-footer-height) + 16px);
+            }
+
+            .ops-board-layout {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+
+            .ops-active-board {
+                overflow-x: auto;
+                overflow-y: hidden;
+                padding-bottom: 6px;
+            }
+
+            .ops-finished-card {
+                height: auto;
+                min-height: 280px;
+            }
+
+            .ops-finished-list-wrap {
+                max-height: 340px;
+            }
+
+            .ops-summary-grid {
+                grid-template-columns: repeat(auto-fit, minmax(164px, 1fr));
+            }
+        }
+
+        @media (max-height: 820px) and (min-width: 1025px) {
+            body.expedicao-tv-mode {
+                overflow-y: auto;
+            }
+
+            .ops-topbar {
+                position: static;
+            }
+
+            .ops-board-wrapper {
+                height: auto;
+                min-height: 440px;
+                padding-bottom: calc(var(--ops-footer-height) + 16px);
+            }
+
+            .ops-board-layout {
+                min-height: 440px;
             }
         }
 
@@ -1044,7 +1257,8 @@
             }
 
             .ops-active-board {
-                overflow-x: visible;
+                overflow-x: auto;
+                overflow-y: hidden;
             }
 
             .ops-finished-card {
@@ -1062,6 +1276,10 @@
 
             .ops-summary-toolbar {
                 flex-direction: column;
+            }
+
+            .ops-summary-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             }
 
             .ops-finished-card {
@@ -1102,10 +1320,30 @@
                 display: block;
             }
 
+            .ops-active-board {
+                overflow-x: visible;
+                overflow-y: visible;
+                padding-bottom: 0;
+            }
+
             .ops-finished-columns {
                 display: grid;
                 grid-template-columns: 1fr;
                 margin-top: 14px;
+            }
+
+            .ops-finished-list-wrap {
+                max-height: none;
+            }
+
+            .ops-finished-body,
+            .ops-finished-item {
+                grid-template-columns: 1fr;
+            }
+
+            .ops-finished-meta,
+            .ops-finished-time {
+                white-space: normal;
             }
 
             .ops-summary-grid {
@@ -1115,7 +1353,18 @@
             .ops-demand-filter,
             .ops-demand-filter > div,
             .ops-demand-select {
+                min-width: 0;
                 width: 100%;
+            }
+
+            .summary-value-row {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .summary-percent {
+                align-self: flex-start;
             }
 
             .flight-board {
@@ -1234,6 +1483,27 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        @media (max-width: 1366px) {
+            .ops-summary-grid.executive,
+            .ops-summary-grid.operational {
+                grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .ops-summary-grid.executive,
+            .ops-summary-grid.operational {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 420px) {
+            .ops-summary-grid.executive,
+            .ops-summary-grid.operational {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 
     <div class="ops-topbar">
@@ -1279,8 +1549,12 @@
             </form>
         </div>
 
-        <div class="ops-summary-grid mb-3">
-            @foreach (($capacidadeOperacional['cards'] ?? []) as $card)
+        @php
+            $cardsResumo = collect($resumoOperacional['cards'] ?? []);
+        @endphp
+
+        <div class="ops-summary-grid executive mb-3">
+            @foreach ($cardsResumo->take(6) as $card)
                 <div class="ops-summary-card {{ $card['classe'] ?? 'neutral' }}">
                     <div class="summary-head">
                         <div class="summary-title">
@@ -1307,8 +1581,8 @@
             @endforeach
         </div>
 
-        <div class="ops-summary-grid">
-            @foreach (($resumoOperacional['cards'] ?? []) as $card)
+        <div class="ops-summary-grid operational">
+            @foreach ($cardsResumo->skip(6) as $card)
                 <div class="ops-summary-card {{ $card['classe'] ?? 'neutral' }}">
                     <div class="summary-head">
                         <div class="summary-title">
@@ -1773,6 +2047,10 @@
                 <span id="opsLiveStatus">MODO VIVO • ROLAGEM AUTOMÁTICA</span>
             </div>
 
+            <button type="button" class="ops-scroll-toggle" id="opsAutoScrollToggle" aria-pressed="true">
+                Rolagem DTs: ativa
+            </button>
+
         </div>
     </div>
 
@@ -1797,7 +2075,8 @@
 
         const liveRefresh = document.getElementById('opsLiveRefresh');
         const liveStatus = document.getElementById('opsLiveStatus');
-        const summaryGrid = document.querySelector('.ops-summary-grid');
+        const autoScrollToggle = document.getElementById('opsAutoScrollToggle');
+        const summaryGrids = Array.from(document.querySelectorAll('.ops-summary-grid'));
         const finishedPanel = document.querySelector('.ops-finished-columns');
         let boardScroller = document.querySelector('.flight-board-body');
         let finishedScrollers = Array.from(document.querySelectorAll('.ops-finished-scroller'));
@@ -1813,6 +2092,42 @@
         let finishedScrollTimer = null;
         let refreshStartedAt = Date.now();
         let syncInProgress = false;
+        let autoScrollEnabled = true;
+
+        function updateAutoScrollToggle() {
+            if (!autoScrollToggle) return;
+
+            autoScrollToggle.textContent = autoScrollEnabled
+                ? 'Rolagem DTs: ativa'
+                : 'Rolagem DTs: inativa';
+            autoScrollToggle.setAttribute('aria-pressed', autoScrollEnabled ? 'true' : 'false');
+            autoScrollToggle.classList.toggle('is-paused', !autoScrollEnabled);
+        }
+
+        function stopFinishedScroll() {
+            if (finishedScrollTimer) {
+                clearInterval(finishedScrollTimer);
+                finishedScrollTimer = null;
+            }
+        }
+
+        function applyAutoScrollState() {
+            updateAutoScrollToggle();
+
+            if (!autoScrollEnabled) {
+                stopAutoScroll();
+                stopFinishedScroll();
+
+                if (liveStatus) {
+                    liveStatus.textContent = 'MODO VIVO • ROLAGEM PAUSADA';
+                }
+
+                return;
+            }
+
+            startFinishedScroll();
+            startAutoScroll();
+        }
 
         function syncPanelHeights() {
             const topbar = document.querySelector('.ops-topbar');
@@ -1820,7 +2135,7 @@
             const footer = document.querySelector('.ops-footer');
 
             document.body.style.setProperty('--ops-header-height', `${topbar ? topbar.offsetHeight : 0}px`);
-            document.body.style.setProperty('--ops-summary-height', `${summary ? summary.offsetHeight : 0}px`);
+            document.body.style.setProperty('--ops-summary-height', `${summary ? summary.clientHeight : 0}px`);
             document.body.style.setProperty('--ops-footer-height', `${footer ? footer.offsetHeight : 0}px`);
         }
 
@@ -1873,7 +2188,7 @@
 
                 const html = await response.text();
                 const doc = new DOMParser().parseFromString(html, 'text/html');
-                const nextSummaryGrid = doc.querySelector('.ops-summary-grid');
+                const nextSummaryGrids = Array.from(doc.querySelectorAll('.ops-summary-grid'));
                 const nextFinishedPanel = doc.querySelector('.ops-finished-columns');
                 const nextBoardBody = doc.querySelector('.flight-board-body');
 
@@ -1882,9 +2197,11 @@
                     finishedScrollers = Array.from(document.querySelectorAll('.ops-finished-scroller'));
                 }
 
-                if (summaryGrid && nextSummaryGrid) {
-                    summaryGrid.innerHTML = nextSummaryGrid.innerHTML;
-                }
+                summaryGrids.forEach((summaryGrid, index) => {
+                    if (summaryGrid && nextSummaryGrids[index]) {
+                        summaryGrid.innerHTML = nextSummaryGrids[index].innerHTML;
+                    }
+                });
 
                 if (boardScroller && nextBoardBody) {
                     boardScroller.innerHTML = nextBoardBody.innerHTML;
@@ -1895,8 +2212,7 @@
 
                 refreshStartedAt = Date.now();
                 syncPanelHeights();
-                startFinishedScroll();
-                startAutoScroll();
+                applyAutoScrollState();
             } catch (error) {
                 if (liveStatus) {
                     liveStatus.textContent = 'MODO VIVO • FALHA NA SINCRONIZAÇÃO';
@@ -1909,6 +2225,7 @@
 
         function canAutoScroll() {
             return window.innerWidth > 720 &&
+                autoScrollEnabled &&
                 !reduceMotion.matches &&
                 boardScroller &&
                 boardScroller.scrollHeight > boardScroller.clientHeight + 160;
@@ -1927,14 +2244,12 @@
         }
 
         function startFinishedScroll() {
-            if (finishedScrollTimer) {
-                clearInterval(finishedScrollTimer);
-                finishedScrollTimer = null;
-            }
+            stopFinishedScroll();
 
             finishedScrollers = Array.from(document.querySelectorAll('.ops-finished-scroller'));
 
             if (
+                !autoScrollEnabled ||
                 finishedScrollers.length === 0 ||
                 reduceMotion.matches ||
                 !finishedScrollers.some((scroller) => scroller.scrollHeight > scroller.clientHeight + 12)
@@ -2001,26 +2316,28 @@
 
         syncPanelHeights();
         updateLiveRefreshLabel();
-        startFinishedScroll();
-        startAutoScroll();
+        applyAutoScrollState();
 
         setInterval(updateLiveRefreshLabel, 1000);
         setInterval(syncLivePanel, refreshIntervalMs);
+
+        autoScrollToggle?.addEventListener('click', () => {
+            autoScrollEnabled = !autoScrollEnabled;
+            applyAutoScrollState();
+        });
 
         window.addEventListener('resize', () => {
             syncPanelHeights();
             boardScroller = document.querySelector('.flight-board-body');
             finishedScrollers = Array.from(document.querySelectorAll('.ops-finished-scroller'));
-            startFinishedScroll();
-            startAutoScroll();
+            applyAutoScrollState();
         });
 
         window.addEventListener('load', () => {
             syncPanelHeights();
             boardScroller = document.querySelector('.flight-board-body');
             finishedScrollers = Array.from(document.querySelectorAll('.ops-finished-scroller'));
-            startFinishedScroll();
-            startAutoScroll();
+            applyAutoScrollState();
         });
     </script>
 @endsection

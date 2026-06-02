@@ -3,6 +3,11 @@
 @section('content')
     @php
         $isOperator = Auth::user()?->tipo === 'operador';
+        $perfilAtual = strtolower((string) (Auth::user()?->tipo ?? session('tipo')));
+        $nivelAtual = strtolower((string) (Auth::user()?->nivel ?? session('nivel')));
+        $canDeleteDt = in_array($perfilAtual, ['admin', 'gestor'], true)
+            || str_contains($nivelAtual, 'admin')
+            || str_contains($nivelAtual, 'gestor');
     @endphp
 
     <div class="container-fluid px-4 py-3">
@@ -316,8 +321,20 @@
                                                 class="form-check-input">
                                         </td>
                                         <td class="px-4 py-3 fw-semibold">
-                                            <a href="#" data-bs-toggle="modal"
-                                                data-bs-target="#modalDistribuicao{{ $d->id }}">{{ $d->fo }}</a>
+                                            <div class="d-inline-flex align-items-center gap-2">
+                                                <a href="#" data-bs-toggle="modal"
+                                                    data-bs-target="#modalDistribuicao{{ $d->id }}">{{ $d->fo }}</a>
+                                                @if (!empty($modoOperacional) && $canDeleteDt)
+                                                    <button type="button"
+                                                        class="btn btn-sm btn-outline-danger btn-icon-delete-dt"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#modalDeleteDemanda{{ $d->id }}"
+                                                        title="Excluir DT"
+                                                        aria-label="Excluir DT {{ $d->fo }}">
+                                                        <i class="mdi mdi-trash-can-outline"></i>
+                                                    </button>
+                                                @endif
+                                            </div>
                                         </td>
                                         <td class="px-4 py-3 text-nowrap">
                                             {{ $d->created_at ? \Carbon\Carbon::parse($d->created_at)->format('d/m/Y') : '-' }}
@@ -396,6 +413,51 @@
                         </table>
                     </div>
                 </form>
+                @if (!empty($modoOperacional) && $canDeleteDt)
+                    @foreach ($demandas as $d)
+                        <div class="modal fade" id="modalDeleteDemanda{{ $d->id }}" tabindex="-1"
+                            aria-labelledby="modalDeleteDemandaLabel{{ $d->id }}" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content border-0 shadow">
+                                    <form id="form-delete-demanda-{{ $d->id }}"
+                                        action="{{ route('demandas.destroy', $d->id) }}" method="POST">
+                                        @csrf
+                                        @method('DELETE')
+                                        <div class="modal-header bg-danger text-white">
+                                            <h5 class="modal-title" id="modalDeleteDemandaLabel{{ $d->id }}">
+                                                Confirmar exclusão da DT {{ $d->fo }}
+                                            </h5>
+                                            <button type="button" class="btn-close btn-close-white"
+                                                data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="alert alert-danger d-flex gap-2 align-items-start mb-3">
+                                                <i class="mdi mdi-alert-triangle-outline fs-4"></i>
+                                                <div>
+                                                    <strong>Esta ação não pode ser desfeita.</strong>
+                                                    <div>Ao confirmar, a DT e seus registros vinculados serão removidos.</div>
+                                                </div>
+                                            </div>
+                                            <label class="form-label small text-muted mb-1"
+                                                for="deletePassword{{ $d->id }}">
+                                                Digite sua senha para confirmar
+                                            </label>
+                                            <input type="password" name="password" id="deletePassword{{ $d->id }}"
+                                                class="form-control" autocomplete="current-password" required>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-outline-secondary"
+                                                data-bs-dismiss="modal">Cancelar</button>
+                                            <button type="submit" class="btn btn-danger">
+                                                <i class="mdi mdi-trash-can-outline me-1"></i> Excluir DT
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                @endif
             </div>
 
             @if ($demandas->hasPages())
@@ -886,6 +948,17 @@
         .badge {
             font-weight: 500;
             padding: 0.35em 0.65em;
+        }
+
+        .btn-icon-delete-dt {
+            width: 30px;
+            height: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            border-radius: 8px;
+            flex: 0 0 30px;
         }
 
         /* Select2 dentro do modal dark */

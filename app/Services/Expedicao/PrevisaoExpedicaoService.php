@@ -144,7 +144,13 @@ class PrevisaoExpedicaoService
         }
 
         if ($rota?->tempo_api_minutos && $this->rotaApiAindaValida($rota)) {
-            return $rota->tempo_api_minutos;
+            $tempoOperacional = $this->tempoViagemOperacionalCaminhao($rota);
+
+            if ($tempoOperacional !== null) {
+                $rota->forceFill(['tempo_operacional_minutos' => $tempoOperacional])->save();
+            }
+
+            return $tempoOperacional;
         }
 
         $dadosApi = app(ConsultaRotaMapsService::class)->consultar(
@@ -153,7 +159,7 @@ class PrevisaoExpedicaoService
         );
 
         if (! $dadosApi) {
-            return $rota?->tempo_api_minutos;
+            return $this->tempoViagemOperacionalCaminhao($rota);
         }
 
         $rota = $rota ?: new ExpedicaoRota([
@@ -167,13 +173,61 @@ class PrevisaoExpedicaoService
         $rota->fill([
             'distancia_km' => $dadosApi['distancia_km'],
             'tempo_api_minutos' => $dadosApi['tempo_api_minutos'],
+            'tempo_operacional_minutos' => self::ajustarTempoViagemCaminhao(
+                $dadosApi['tempo_api_minutos'],
+                $dadosApi['distancia_km']
+            ),
             'ultima_consulta_em' => now(),
             'ativo' => true,
         ]);
 
         $rota->save();
 
-        return $rota->tempo_operacional_minutos ?? $rota->tempo_api_minutos;
+        return $this->tempoViagemOperacionalCaminhao($rota);
+    }
+
+    public static function ajustarTempoViagemCaminhao(?int $tempoApiMinutos, $distanciaKm = null): ?int
+    {
+        if ($tempoApiMinutos === null && $distanciaKm === null) {
+            return null;
+        }
+
+        $multiplicador = max(1.0, (float) config('services.expedicao_rotas.truck_time_multiplier', 1.6));
+        $bufferMinutos = max(0, (int) config('services.expedicao_rotas.truck_fixed_buffer_minutes', 20));
+        $pisoMinutos = max(0, (int) config('services.expedicao_rotas.truck_min_minutes', 60));
+        $velocidadeMedia = max(1.0, (float) config('services.expedicao_rotas.truck_average_speed_kmh', 45));
+
+        $candidatos = [];
+
+        if ($tempoApiMinutos !== null && $tempoApiMinutos > 0) {
+            $candidatos[] = (int) ceil($tempoApiMinutos * $multiplicador) + $bufferMinutos;
+        }
+
+        if ($distanciaKm !== null && (float) $distanciaKm > 0) {
+            $candidatos[] = (int) ceil(((float) $distanciaKm / $velocidadeMedia) * 60) + $bufferMinutos;
+        }
+
+        if ($pisoMinutos > 0) {
+            $candidatos[] = $pisoMinutos;
+        }
+
+        return $candidatos ? max($candidatos) : null;
+    }
+
+    public function tempoViagemOperacionalCaminhao(?ExpedicaoRota $rota): ?int
+    {
+        if (! $rota) {
+            return null;
+        }
+
+        if ($rota->tempo_operacional_minutos) {
+            return (int) $rota->tempo_operacional_minutos;
+        }
+
+        return self::ajustarTempoViagemCaminhao(
+            $rota->tempo_api_minutos ? (int) $rota->tempo_api_minutos : null,
+            $rota->distancia_km
+        );
     }
 
     private function rotaApiAindaValida(ExpedicaoRota $rota): bool
