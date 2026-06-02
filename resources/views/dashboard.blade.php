@@ -195,7 +195,7 @@
                 <h5 class="mb-0 fw-semibold text-dark">Demandas do Dia</h5>
             </div>
             <div class="d-flex gap-2">
-                <button class="btn btn-success btn-sm btn-icon" onclick="gerarImagemERedirecionar2()">
+                <button class="btn btn-success btn-sm btn-icon" id="enviar-report-expedicao" type="button">
                     <i class="mdi mdi-whatsapp"></i> Enviar Report Expedição
                 </button>
                 <a href="{{ route('expedicao.relatorio.pdf') }}" class="btn btn-outline-danger btn-sm btn-icon" target="_blank">
@@ -270,7 +270,7 @@
                 <h5 class="mb-0 fw-semibold text-dark">Produção</h5>
             </div>
             <div class="d-flex gap-2">
-                <button class="btn btn-success btn-sm btn-icon" onclick="gerarImagemERedirecionar()">
+                <button class="btn btn-success btn-sm btn-icon" id="enviar-report-kits" type="button">
                     <i class="mdi mdi-whatsapp"></i> Enviar Report Kits
                 </button>
                 <a href="{{ route('relatorios.producao') }}" class="btn btn-outline-danger btn-sm btn-icon" target="_blank">
@@ -468,7 +468,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <script>
+    <script nonce="{{ $cspNonce ?? '' }}">
         // ========== Funções genéricas de gráficos ==========
         function renderBarChart(id, label, nomes, quantidades, color) {
             const options = {
@@ -730,10 +730,23 @@
                 }, 1000);
             });
         }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const reportKitsButton = document.getElementById('enviar-report-kits');
+            const reportExpedicaoButton = document.getElementById('enviar-report-expedicao');
+
+            if (reportKitsButton) {
+                reportKitsButton.addEventListener('click', gerarImagemERedirecionar);
+            }
+
+            if (reportExpedicaoButton) {
+                reportExpedicaoButton.addEventListener('click', gerarImagemERedirecionar2);
+            }
+        });
     </script>
 
     {{-- ========== Gráfico de Projeção de Produtividade (Chart.js) ========== --}}
-    <script>
+    <script nonce="{{ $cspNonce ?? '' }}">
     document.addEventListener("DOMContentLoaded", function () {
         let ctx = document.getElementById('graficoProdutividade').getContext('2d');
 
@@ -863,7 +876,7 @@
     </script>
 
     {{-- ========== Gauge de Velocidade de Produção ========== --}}
-    <script>
+    <script nonce="{{ $cspNonce ?? '' }}">
     document.addEventListener("DOMContentLoaded", async function () {
         const ctx = document.getElementById('gaugeVelocidade').getContext('2d');
 

@@ -2,7 +2,7 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
-<script>
+<script nonce="{{ $cspNonce ?? '' }}">
 document.addEventListener('DOMContentLoaded', function () {
     const kitsHoje = @json($kitsHoje);
     const kitLabels = Object.keys(kitsHoje).filter(k => k !== 'TOTAL');

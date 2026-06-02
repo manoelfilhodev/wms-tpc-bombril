@@ -379,7 +379,7 @@
             color: #fff !important;
         }
     </style>
-    <script>
+    <script nonce="{{ $cspNonce ?? '' }}">
         const dadosGraficos = @json($dadosGraficos);
 
         const baseGrid = 'rgba(148, 163, 184, 0.15)';

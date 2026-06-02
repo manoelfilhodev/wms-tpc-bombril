@@ -96,7 +96,7 @@
 
     <script src="{{ asset('assets/js/vendor.min.js') }}"></script>
     <script src="{{ asset('assets/js/app.min.js') }}"></script>
-    <script>
+    <script nonce="{{ $cspNonce ?? '' }}">
         function initTooltips() {
             const nodes = document.querySelectorAll('[data-bs-toggle="tooltip"]');
             nodes.forEach(function (node) {
@@ -129,7 +129,7 @@
         }
     </script>
 
-    <script>
+    <script nonce="{{ $cspNonce ?? '' }}">
         document.addEventListener('DOMContentLoaded', function () {
             const storedTheme = localStorage.getItem('darkMode') === 'true';
             const html = document.documentElement;
@@ -177,7 +177,7 @@
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
-    <script>
+    <script nonce="{{ $cspNonce ?? '' }}">
         document.addEventListener('DOMContentLoaded', function () {
             const form = document.getElementById('meu-formulario');
             const msg = document.getElementById('mensagem');
@@ -234,7 +234,7 @@
         });
     </script>
 
-    <script>
+    <script nonce="{{ $cspNonce ?? '' }}">
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register("{{ asset('service-worker.js') }}").catch(function () {});
@@ -242,7 +242,7 @@
         }
     </script>
 
-    <script>
+    <script nonce="{{ $cspNonce ?? '' }}">
         if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission().then(function () {});
         }
