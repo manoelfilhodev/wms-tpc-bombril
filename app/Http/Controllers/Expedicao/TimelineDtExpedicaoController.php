@@ -55,8 +55,8 @@ class TimelineDtExpedicaoController extends Controller
                 'ep.cidade_destino',
                 'ep.uf_destino',
                 'ep.agenda_entrega_em',
-                'ep.tipo_demanda',
             ])
+            ->selectRaw("COALESCE(ep.tipo_demanda, ?) as tipo_demanda", [ExpedicaoProgramacao::TIPO_OPORTUNIDADE])
             ->orderByRaw('COALESCE(d.saida_veiculo_em, d.carregamento_finalizado_em, d.updated_at, d.created_at) desc')
             ->paginate(20)
             ->withQueryString();
@@ -116,15 +116,17 @@ class TimelineDtExpedicaoController extends Controller
         }
 
         if ($tipoDemanda === ExpedicaoProgramacao::TIPO_PROGRAMADA) {
-            $query->where(function ($query) {
-                $query->whereNull('ep.tipo_demanda')
-                    ->orWhere('ep.tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA);
-            });
+            $query->where('ep.tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA);
 
             return;
         }
 
-        $query->where('ep.tipo_demanda', $tipoDemanda);
+        if ($tipoDemanda === ExpedicaoProgramacao::TIPO_OPORTUNIDADE) {
+            $query->where(function ($query) {
+                $query->whereNull('ep.tipo_demanda')
+                    ->orWhere('ep.tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE);
+            });
+        }
     }
 
     private function montarResumo(): array

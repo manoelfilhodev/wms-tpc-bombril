@@ -8,8 +8,10 @@ use App\Models\Expedicao\ExpedicaoProgramacao;
 use App\Services\Expedicao\TimelineDtService;
 use App\Services\SystemLogService;
 use Carbon\Carbon;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Collection;
 
 class SaidaVeiculoExpedicaoController extends Controller
 {
@@ -19,11 +21,9 @@ class SaidaVeiculoExpedicaoController extends Controller
         $status = strtoupper((string) $request->input('status', 'PENDENTES'));
         $status = in_array($status, ['PENDENTES', 'FINALIZADAS', 'TODAS'], true) ? $status : 'PENDENTES';
 
-        $programacoes = ExpedicaoProgramacao::query()
+        $programacoesBase = ExpedicaoProgramacao::query()
             ->with('ultimaPrevisao')
             ->whereExists(fn ($query) => $this->whereCarregamentoFinalizado($query))
-            ->when($status === 'PENDENTES', fn ($query) => $query->whereExists(fn ($query) => $this->whereSaidaPendente($query)))
-            ->when($status === 'FINALIZADAS', fn ($query) => $query->whereExists(fn ($query) => $this->whereSaidaFinalizada($query)))
             ->when($busca !== '', function ($query) use ($busca) {
                 $query->where(function ($query) use ($busca) {
                     $query->where('fo', 'like', "%{$busca}%")
@@ -33,9 +33,22 @@ class SaidaVeiculoExpedicaoController extends Controller
                 });
             })
             ->orderByRaw('agenda_entrega_em IS NULL')
-            ->orderBy('agenda_entrega_em')
-            ->paginate(15)
-            ->withQueryString();
+            ->orderBy('agenda_entrega_em');
+
+        $programacoesComCarregamento = $this->programacoesComOportunidadesSemProgramacao($programacoesBase, $busca)
+            ->filter(fn (ExpedicaoProgramacao $programacao) => $this->dataOperacionalValida($programacao->demanda?->carregamento_finalizado_em))
+            ->values();
+
+        $programacoesCollection = $programacoesComCarregamento
+            ->when($status === 'PENDENTES', fn (Collection $items) => $items->filter(
+                fn (ExpedicaoProgramacao $programacao) => ! $this->dataOperacionalValida($programacao->demanda?->saida_veiculo_em)
+            ))
+            ->when($status === 'FINALIZADAS', fn (Collection $items) => $items->filter(
+                fn (ExpedicaoProgramacao $programacao) => $this->dataOperacionalValida($programacao->demanda?->saida_veiculo_em)
+            ))
+            ->values();
+
+        $programacoes = $this->paginarCollection($programacoesCollection, 15, $request);
 
         $demandas = Demanda::whereIn('fo', $programacoes->getCollection()->pluck('fo'))
             ->get()
@@ -48,14 +61,12 @@ class SaidaVeiculoExpedicaoController extends Controller
         });
 
         $resumo = [
-            'pendentes' => ExpedicaoProgramacao::query()
-                ->whereExists(fn ($query) => $this->whereCarregamentoFinalizado($query))
-                ->whereExists(fn ($query) => $this->whereSaidaPendente($query))
-                ->count(),
-            'finalizadas' => ExpedicaoProgramacao::query()
-                ->whereExists(fn ($query) => $this->whereCarregamentoFinalizado($query))
-                ->whereExists(fn ($query) => $this->whereSaidaFinalizada($query))
-                ->count(),
+            'pendentes' => $programacoesComCarregamento->filter(
+                fn (ExpedicaoProgramacao $programacao) => ! $this->dataOperacionalValida($programacao->demanda?->saida_veiculo_em)
+            )->count(),
+            'finalizadas' => $programacoesComCarregamento->filter(
+                fn (ExpedicaoProgramacao $programacao) => $this->dataOperacionalValida($programacao->demanda?->saida_veiculo_em)
+            )->count(),
         ];
 
         return view('expedicao.saida-veiculos.index', [
@@ -69,8 +80,9 @@ class SaidaVeiculoExpedicaoController extends Controller
 
     public function show(string $fo, TimelineDtService $timelineService)
     {
-        $programacao = ExpedicaoProgramacao::with('ultimaPrevisao')->where('fo', $fo)->firstOrFail();
         $demanda = Demanda::with(['distribuicoes', 'separador'])->where('fo', $fo)->firstOrFail();
+        $programacao = ExpedicaoProgramacao::with('ultimaPrevisao')->where('fo', $fo)->first()
+            ?: $this->programacaoVirtual($demanda);
 
         $programacao->demanda = $demanda;
 
@@ -202,5 +214,83 @@ class SaidaVeiculoExpedicaoController extends Controller
             'old_values' => $oldValues,
             'new_values' => $demanda->only(['fo', 'saida_veiculo_em', 'saida_veiculo_usuario_id', 'saida_veiculo_observacao']),
         ]);
+    }
+
+    private function programacoesComOportunidadesSemProgramacao($baseProgramacoes, string $busca): Collection
+    {
+        $programacoes = (clone $baseProgramacoes)->get();
+        $demandas = Demanda::whereIn('fo', $programacoes->pluck('fo')->filter())->get()->keyBy('fo');
+
+        $programacoes->transform(function (ExpedicaoProgramacao $programacao) use ($demandas) {
+            $programacao->demanda = $demandas->get($programacao->fo);
+
+            return $programacao;
+        });
+
+        $oportunidades = $this->queryOportunidadesSemProgramacao($busca)
+            ->get()
+            ->map(fn (Demanda $demanda) => $this->programacaoVirtual($demanda));
+
+        return $programacoes
+            ->concat($oportunidades)
+            ->sortBy(fn (ExpedicaoProgramacao $programacao) =>
+                optional($programacao->agenda_entrega_em)->timestamp
+                ?? optional($programacao->demanda?->carregamento_finalizado_em)->timestamp
+                ?? optional($programacao->demanda?->created_at)->timestamp
+                ?? PHP_INT_MAX
+            )
+            ->values();
+    }
+
+    private function queryOportunidadesSemProgramacao(string $busca)
+    {
+        return Demanda::query()
+            ->where('tipo', 'EXPEDICAO')
+            ->whereNotNull('carregamento_finalizado_em')
+            ->where('carregamento_finalizado_em', '>=', Demanda::DATA_OPERACIONAL_MINIMA)
+            ->whereNotExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('_tb_expedicao_programacoes as ep')
+                    ->whereColumn('ep.fo', '_tb_demanda.fo');
+            })
+            ->when($busca !== '', function ($query) use ($busca) {
+                $query->where(function ($query) use ($busca) {
+                    $query->where('fo', 'like', "%{$busca}%")
+                        ->orWhere('cliente', 'like', "%{$busca}%")
+                        ->orWhere('transportadora', 'like', "%{$busca}%");
+                });
+            });
+    }
+
+    private function programacaoVirtual(Demanda $demanda): ExpedicaoProgramacao
+    {
+        $programacao = new ExpedicaoProgramacao([
+            'fo' => $demanda->fo,
+            'dt_sap' => $demanda->fo,
+            'cliente' => $demanda->cliente,
+            'transportadora' => $demanda->transportadora,
+            'tipo_demanda' => ExpedicaoProgramacao::TIPO_OPORTUNIDADE,
+            'origem_demanda' => ExpedicaoProgramacao::ORIGEM_IMPORTACAO_OPORTUNIDADE,
+            'possui_picking' => true,
+        ]);
+        $programacao->demanda = $demanda;
+
+        return $programacao;
+    }
+
+    private function paginarCollection(Collection $items, int $perPage, Request $request): LengthAwarePaginator
+    {
+        $page = LengthAwarePaginator::resolveCurrentPage();
+
+        return new LengthAwarePaginator(
+            $items->forPage($page, $perPage)->values(),
+            $items->count(),
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ]
+        );
     }
 }

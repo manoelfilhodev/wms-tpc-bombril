@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Expedicao;
 
 use App\Http\Controllers\Controller;
+use App\Models\Demanda;
 use App\Models\Expedicao\ExpedicaoProgramacao;
 use App\Services\Expedicao\CapacidadeOperacionalService;
 use App\Services\Expedicao\PrevisaoExpedicaoService;
@@ -28,7 +29,23 @@ class PrevisibilidadeExpedicaoController extends Controller
             ->orderBy('agenda_entrega_em')
             ->get();
 
-        $demandasPorFo = DB::table('_tb_demanda')
+        if ($tipoDemanda !== ExpedicaoProgramacao::TIPO_PROGRAMADA) {
+            $oportunidadesSemProgramacao = Demanda::query()
+                ->where('tipo', 'EXPEDICAO')
+                ->whereNotNull('separacao_finalizada_em')
+                ->where('separacao_finalizada_em', '>=', self::DATA_OPERACIONAL_MINIMA)
+                ->whereNotExists(function ($query) {
+                    $query->selectRaw('1')
+                        ->from('_tb_expedicao_programacoes as ep')
+                        ->whereColumn('ep.fo', '_tb_demanda.fo');
+                })
+                ->get()
+                ->map(fn (Demanda $demanda) => $this->programacaoVirtual($demanda));
+
+            $programacoes = $programacoes->concat($oportunidadesSemProgramacao)->values();
+        }
+
+        $demandasPorFo = Demanda::query()
             ->whereIn('fo', $programacoes->pluck('fo')->filter()->unique()->values())
             ->get()
             ->keyBy('fo');
@@ -45,6 +62,7 @@ class PrevisibilidadeExpedicaoController extends Controller
             if (
                 $demanda &&
                 $recalculosExecutados < $maxRecalculosPorCarga &&
+                $programacao->exists &&
                 $this->previsaoPrecisaRecalculo($programacao)
             ) {
                 try {
@@ -575,5 +593,21 @@ class PrevisibilidadeExpedicaoController extends Controller
         }
 
         return round(($valor / $total) * 100, 1);
+    }
+
+    private function programacaoVirtual(Demanda $demanda): ExpedicaoProgramacao
+    {
+        $programacao = new ExpedicaoProgramacao([
+            'fo' => $demanda->fo,
+            'dt_sap' => $demanda->fo,
+            'cliente' => $demanda->cliente,
+            'transportadora' => $demanda->transportadora,
+            'tipo_demanda' => ExpedicaoProgramacao::TIPO_OPORTUNIDADE,
+            'origem_demanda' => ExpedicaoProgramacao::ORIGEM_IMPORTACAO_OPORTUNIDADE,
+            'possui_picking' => true,
+        ]);
+        $programacao->demanda = $demanda;
+
+        return $programacao;
     }
 }

@@ -148,6 +148,41 @@ class ExpedicaoOperadorAcessoTest extends TestCase
             ->assertDontSee('FO-EXP-FILA-003');
     }
 
+    public function test_apontamento_exibe_dt_separada_sem_programacao_como_oportunidade(): void
+    {
+        $operador = $this->createOperator();
+
+        $this->actingAs($operador)->withSession([
+            'tipo' => 'operador',
+            'nivel' => 'Operador',
+            'user_id' => $operador->id_user,
+            'nome' => $operador->nome,
+            'unidade' => $operador->unidade_id,
+        ]);
+
+        Demanda::create([
+            'fo' => 'FO-OPORT-SEM-PROG-001',
+            'cliente' => 'Cliente Oportunidade',
+            'transportadora' => 'Transportadora Oportunidade',
+            'tipo' => 'EXPEDICAO',
+            'status' => 'CONFERIDO',
+            'quantidade' => 1,
+            'possui_sobra' => true,
+            'separacao_finalizada_em' => now()->subHour(),
+            'conferencia_finalizada_em' => null,
+            'carregamento_finalizado_em' => null,
+        ]);
+
+        $this->get(route('expedicao.apontamentos-operacionais.index', ['tipo_demanda' => 'OPORTUNIDADE']))
+            ->assertOk()
+            ->assertSee('FO-OPORT-SEM-PROG-001')
+            ->assertSee('Oportunidade');
+
+        $this->get(route('expedicao.apontamentos-operacionais.index', ['tipo_demanda' => 'PROGRAMADA']))
+            ->assertOk()
+            ->assertDontSee('FO-OPORT-SEM-PROG-001');
+    }
+
     public function test_previsibilidade_nao_exibe_dts_com_expedicao_finalizada(): void
     {
         $operador = $this->createOperator();
@@ -368,6 +403,77 @@ class ExpedicaoOperadorAcessoTest extends TestCase
             'action' => 'saida_veiculo_registrada',
             'entity_id' => (string) $demanda->id,
         ]);
+    }
+
+    public function test_saida_de_veiculo_exibe_dt_carregada_sem_programacao(): void
+    {
+        $operador = $this->createOperator();
+
+        $this->actingAs($operador)->withSession([
+            'tipo' => 'operador',
+            'nivel' => 'Operador',
+            'user_id' => $operador->id_user,
+            'nome' => $operador->nome,
+            'unidade' => $operador->unidade_id,
+        ]);
+
+        Demanda::create([
+            'fo' => 'FO-SAIDA-SEM-PROG-001',
+            'cliente' => 'Cliente Saida Sem Prog',
+            'transportadora' => 'Transportadora Saida',
+            'tipo' => 'EXPEDICAO',
+            'status' => 'CONFERIDO',
+            'quantidade' => 1,
+            'possui_sobra' => true,
+            'separacao_finalizada_em' => now()->subHours(4),
+            'conferencia_finalizada_em' => now()->subHours(2),
+            'carregamento_finalizado_em' => now()->subMinutes(30),
+            'saida_veiculo_em' => null,
+        ]);
+
+        $this->get(route('expedicao.saida-veiculos.index'))
+            ->assertOk()
+            ->assertSee('FO-SAIDA-SEM-PROG-001')
+            ->assertSee('Oportunidade')
+            ->assertSee('Registrar saída');
+
+        $this->get(route('expedicao.saida-veiculos.show', 'FO-SAIDA-SEM-PROG-001'))
+            ->assertOk()
+            ->assertSee('FO-SAIDA-SEM-PROG-001')
+            ->assertSee('Oportunidade');
+    }
+
+    public function test_timeline_classifica_dt_sem_programacao_como_oportunidade(): void
+    {
+        $operador = $this->createOperator();
+
+        $this->actingAs($operador)->withSession([
+            'tipo' => 'operador',
+            'nivel' => 'Operador',
+            'user_id' => $operador->id_user,
+            'nome' => $operador->nome,
+            'unidade' => $operador->unidade_id,
+        ]);
+
+        Demanda::create([
+            'fo' => 'FO-TL-SEM-PROG-001',
+            'cliente' => 'Cliente Timeline Sem Prog',
+            'transportadora' => 'Transportadora Timeline',
+            'tipo' => 'EXPEDICAO',
+            'status' => 'CONFERIDO',
+            'quantidade' => 1,
+            'possui_sobra' => true,
+            'separacao_finalizada_em' => now()->subHour(),
+        ]);
+
+        $this->get(route('expedicao.timeline-dts.index', ['tipo_demanda' => 'OPORTUNIDADE', 'busca' => 'FO-TL-SEM-PROG']))
+            ->assertOk()
+            ->assertSee('FO-TL-SEM-PROG-001')
+            ->assertSee('Oportunidade');
+
+        $this->get(route('expedicao.timeline-dts.index', ['tipo_demanda' => 'PROGRAMADA', 'busca' => 'FO-TL-SEM-PROG']))
+            ->assertOk()
+            ->assertDontSee('FO-TL-SEM-PROG-001');
     }
 
     public function test_edicao_de_saida_de_veiculo_e_restrita_a_admin_ou_gestor(): void

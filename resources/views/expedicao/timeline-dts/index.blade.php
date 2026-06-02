@@ -4,19 +4,23 @@
 
 @section('content')
     @php
-        function dtTimeValida($data) {
-            return $data && \Carbon\Carbon::parse($data)->gte(\App\Models\Demanda::DATA_OPERACIONAL_MINIMA);
+        if (! function_exists('dtTimeValida')) {
+            function dtTimeValida($data) {
+                return $data && \Carbon\Carbon::parse($data)->gte(\App\Models\Demanda::DATA_OPERACIONAL_MINIMA);
+            }
         }
 
-        function statusTimelineDt($dt) {
-            if (dtTimeValida($dt->saida_veiculo_em)) return ['label' => 'Com saída', 'class' => 'ok'];
-            if (dtTimeValida($dt->carregamento_finalizado_em)) return ['label' => 'Carregada', 'class' => 'loaded'];
-            if (dtTimeValida($dt->carregamento_iniciado_em)) return ['label' => 'Carregando', 'class' => 'active'];
-            if (dtTimeValida($dt->conferencia_finalizada_em)) return ['label' => 'Aguard. carga', 'class' => 'active'];
-            if (dtTimeValida($dt->conferencia_iniciada_em)) return ['label' => 'Conferindo', 'class' => 'active'];
-            if (dtTimeValida($dt->separacao_finalizada_em)) return ['label' => 'Separada', 'class' => 'active'];
-            if (dtTimeValida($dt->separacao_iniciada_em)) return ['label' => 'Separando', 'class' => 'active'];
-            return ['label' => 'A separar', 'class' => 'pending'];
+        if (! function_exists('statusTimelineDt')) {
+            function statusTimelineDt($dt) {
+                if (dtTimeValida($dt->saida_veiculo_em)) return ['label' => 'Com saída', 'class' => 'ok'];
+                if (dtTimeValida($dt->carregamento_finalizado_em)) return ['label' => 'Carregada', 'class' => 'loaded'];
+                if (dtTimeValida($dt->carregamento_iniciado_em)) return ['label' => 'Carregando', 'class' => 'active'];
+                if (dtTimeValida($dt->conferencia_finalizada_em)) return ['label' => 'Aguard. carga', 'class' => 'active'];
+                if (dtTimeValida($dt->conferencia_iniciada_em)) return ['label' => 'Conferindo', 'class' => 'active'];
+                if (dtTimeValida($dt->separacao_finalizada_em)) return ['label' => 'Separada', 'class' => 'active'];
+                if (dtTimeValida($dt->separacao_iniciada_em)) return ['label' => 'Separando', 'class' => 'active'];
+                return ['label' => 'A separar', 'class' => 'pending'];
+            }
         }
     @endphp
 
@@ -188,7 +192,7 @@
                         @forelse ($dts as $dt)
                             @php
                                 $statusLinha = statusTimelineDt($dt);
-                                $tipo = $dt->tipo_demanda ?: 'PROGRAMADA';
+                                $tipo = $dt->tipo_demanda ?: 'OPORTUNIDADE';
                             @endphp
                             <tr>
                                 <td>

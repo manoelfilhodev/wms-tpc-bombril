@@ -144,7 +144,7 @@
                         {{ $programacao?->cidade_destino ? $programacao->cidade_destino.'/'.$programacao->uf_destino : '-' }}
                     </div>
                     <div class="timeline-muted small">{{ $programacao?->cliente ?? $demanda->cliente ?? '-' }}</div>
-                    <div class="timeline-muted small mt-2">Tipo: {{ $programacao?->tipo_demanda_label ?? 'Programada' }}</div>
+                    <div class="timeline-muted small mt-2">Tipo: {{ $programacao?->tipo_demanda_label ?? 'Oportunidade' }}</div>
                     <div class="timeline-muted small">Agenda: {{ optional($programacao?->agenda_entrega_em)->format('d/m/Y H:i') ?? '-' }}</div>
                     <div class="timeline-muted small">Transportadora: {{ $demanda->transportadora ?? '-' }}</div>
                     @if ($demanda->saida_veiculo_observacao)
