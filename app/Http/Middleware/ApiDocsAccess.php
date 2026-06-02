@@ -16,9 +16,7 @@ class ApiDocsAccess
             FILTER_NULL_ON_FAILURE
         ) === true;
 
-        $enabled = app()->environment('local') || $enabledByFlag;
-
-        if (! $enabled) {
+        if (! $enabledByFlag) {
             abort(404);
         }
 

@@ -1,6 +1,12 @@
 name: OWASP ZAP Baseline
 
 on:
+  push:
+    branches:
+      - main
+      - security/**
+      - feature/**
+      - homolog/**
   workflow_dispatch:
     inputs:
       target_url:
@@ -15,7 +21,7 @@ jobs:
       - name: ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.14.0
         with:
-          target: ${{ inputs.target_url }}
+          target: ${{ inputs.target_url || secrets.ZAP_TARGET_URL }}
           cmd_options: '-a -r zap-baseline-report.html'
           fail_action: false
 

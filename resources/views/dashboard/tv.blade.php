@@ -75,7 +75,7 @@
 
 @section('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-<script>
+<script nonce="{{ $cspNonce ?? '' }}">
 const statusData = {!! json_encode([
   (int) ($status['a_separar'] ?? 0),
   (int) ($status['separando'] ?? 0),

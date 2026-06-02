@@ -2088,19 +2088,51 @@ class DemandaController extends Controller
             ->orderBy('dia')
             ->pluck('caixas', 'dia');
 
+        $baseCaixasMesOportunidades = DB::table('_tb_demanda_distribuicoes as dd')
+            ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
+            ->where('d.possui_sobra', true)
+            ->whereNotNull('dd.finalizado_em')
+            ->whereBetween('dd.finalizado_em', [$inicioMesKpi, $fimMesKpi])
+            ->whereNotExists(function ($subquery) {
+                $subquery->selectRaw('1')
+                    ->from('_tb_expedicao_programacoes as ep')
+                    ->whereColumn('ep.fo', 'd.fo')
+                    ->where('ep.tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA);
+            });
+
+        if ($turno) {
+            $this->aplicarFiltroTurnoSql($baseCaixasMesOportunidades, 'dd.finalizado_em', $turno);
+        }
+
+        if ($separador !== '') {
+            $baseCaixasMesOportunidades->where('dd.separador_nome', 'like', "%{$separador}%");
+        }
+
+        $caixasOportunidadesPorDiaMesRaw = (clone $baseCaixasMesOportunidades)
+            ->selectRaw("{$dateExprDistribuicao} as dia")
+            ->selectRaw('SUM(COALESCE(dd.quantidade_pecas, 0)) as caixas')
+            ->groupBy('dia')
+            ->orderBy('dia')
+            ->pluck('caixas', 'dia');
+
         $labelsDiasMes = collect();
         $valoresDiasMes = collect();
+        $valoresOportunidadesDiasMes = collect();
         $cursorMes = $inicioMesKpi->copy();
         while ($cursorMes <= $fimMesKpi) {
             $diaKey = $cursorMes->toDateString();
             $labelsDiasMes->push($cursorMes->format('d/m'));
             $valoresDiasMes->push((int) ($caixasPorDiaMesRaw[$diaKey] ?? 0));
+            $valoresOportunidadesDiasMes->push((int) ($caixasOportunidadesPorDiaMesRaw[$diaKey] ?? 0));
             $cursorMes->addDay();
         }
 
         $diasComProducaoMes = max(1, $valoresDiasMes->filter(fn($valor) => $valor > 0)->count());
         $totalCaixasMes = (int) $valoresDiasMes->sum();
         $mediaCaixasDiaMes = round($totalCaixasMes / $diasComProducaoMes, 1);
+        $diasComProducaoOportunidadesMes = max(1, $valoresOportunidadesDiasMes->filter(fn($valor) => $valor > 0)->count());
+        $totalCaixasOportunidadesMes = (int) $valoresOportunidadesDiasMes->sum();
+        $mediaCaixasOportunidadesDiaMes = round($totalCaixasOportunidadesMes / $diasComProducaoOportunidadesMes, 1);
 
         $labelsPeriodo = collect();
         $cursor = $inicio->copy()->startOfDay();
@@ -2278,6 +2310,14 @@ class DemandaController extends Controller
                 'meta' => $metaCaixasDia,
                 'total' => $totalCaixasMes,
                 'media' => $mediaCaixasDiaMes,
+                'mes' => $dataReferenciaKpi->format('m/Y'),
+            ],
+            'caixasOportunidadesPorDiaMes' => [
+                'labels' => $labelsDiasMes->values(),
+                'values' => $valoresOportunidadesDiasMes->values(),
+                'meta' => $metaCaixasDia,
+                'total' => $totalCaixasOportunidadesMes,
+                'media' => $mediaCaixasOportunidadesDiaMes,
                 'mes' => $dataReferenciaKpi->format('m/Y'),
             ],
         ];

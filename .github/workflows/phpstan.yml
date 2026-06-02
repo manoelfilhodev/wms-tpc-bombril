@@ -7,6 +7,7 @@ on:
       - main
       - security/**
       - feature/**
+      - homolog/**
 
 jobs:
   phpstan:

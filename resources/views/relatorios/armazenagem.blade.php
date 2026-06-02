@@ -95,28 +95,34 @@
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    const ctx = document.getElementById('graficoArmazenagem').getContext('2d');
-    const chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: {!! json_encode($grafico->pluck('nome')) !!},
-            datasets: [{
-                label: 'Total de Armazenagens',
-                data: {!! json_encode($grafico->pluck('total')) !!},
-                backgroundColor: 'rgba(75, 192, 192, 0.7)',
-                borderColor: 'rgba(75, 192, 192, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true
+<script nonce="{{ $cspNonce ?? '' }}">
+    document.addEventListener('DOMContentLoaded', function () {
+        const canvas = document.getElementById('graficoArmazenagem');
+        if (!canvas || typeof Chart === 'undefined') {
+            return;
+        }
+
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: {!! json_encode($grafico->pluck('nome')) !!},
+                datasets: [{
+                    label: 'Total de Armazenagens',
+                    data: {!! json_encode($grafico->pluck('total')) !!},
+                    backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
                 }
             }
-        }
+        });
     });
 </script>
 @endpush

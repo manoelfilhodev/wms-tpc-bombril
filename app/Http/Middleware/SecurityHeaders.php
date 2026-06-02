@@ -15,6 +15,7 @@ class SecurityHeaders
         view()->share('cspNonce', $nonce);
 
         $response = $next($request);
+        $this->addNonceToInlineScripts($response, $nonce);
 
         if ($request->isSecure() || app()->environment('production')) {
             $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -30,5 +31,30 @@ class SecurityHeaders
         );
 
         return $response;
+    }
+
+    private function addNonceToInlineScripts(Response $response, string $nonce): void
+    {
+        $contentType = (string) $response->headers->get('Content-Type', '');
+
+        if ($contentType !== '' && ! str_contains($contentType, 'text/html')) {
+            return;
+        }
+
+        $content = $response->getContent();
+
+        if (! is_string($content) || ! str_contains($content, '<script')) {
+            return;
+        }
+
+        $updated = preg_replace_callback(
+            '/<script\b(?![^>]*\b(?:src|nonce)=)([^>]*)>/i',
+            fn (array $matches): string => '<script nonce="' . e($nonce) . '"' . $matches[1] . '>',
+            $content
+        );
+
+        if (is_string($updated) && $updated !== $content) {
+            $response->setContent($updated);
+        }
     }
 }

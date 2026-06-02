@@ -182,12 +182,12 @@
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
+<script nonce="{{ $cspNonce ?? '' }}">
+document.addEventListener('DOMContentLoaded', function () {
     // Descomente o card de gráfico acima para ativar este script
     const canvas = document.getElementById('graficoSeparacoes');
-    if (canvas) {
-        const ctx = canvas.getContext('2d');
-        const chart = new Chart(ctx, {
+    if (canvas && typeof Chart !== 'undefined') {
+        new Chart(canvas, {
             type: 'bar',
             data: {
                 labels: {!! json_encode($grafico->pluck('nome') ?? []) !!},
@@ -213,5 +213,6 @@
             }
         });
     }
+});
 </script>
 @endpush

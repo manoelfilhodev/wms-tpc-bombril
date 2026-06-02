@@ -206,6 +206,33 @@
                 </div>
             </section>
 
+            <section class="panel span-2">
+                <div class="panel-title">
+                    <div>
+                        <h2>Caixas de oportunidades por dia no mês</h2>
+                        <p>Histórico mensal do picking considerando somente demandas não programadas.</p>
+                    </div>
+                    <span class="badge-soft">Meta {{ $fmt($resumo['meta_caixas_dia'] ?? 22500) }}/dia</span>
+                </div>
+                <div class="chart-box">
+                    <canvas id="chartCaixasOportunidadesDiaMes"></canvas>
+                </div>
+                <div class="mini-metrics three-cols compact">
+                    <div>
+                        <span>Total mês</span>
+                        <strong>{{ $fmt($dadosGraficos['caixasOportunidadesPorDiaMes']['total'] ?? 0) }}</strong>
+                    </div>
+                    <div>
+                        <span>Média diária</span>
+                        <strong>{{ $fmt($dadosGraficos['caixasOportunidadesPorDiaMes']['media'] ?? 0) }}</strong>
+                    </div>
+                    <div>
+                        <span>Meta diária</span>
+                        <strong>{{ $fmt($resumo['meta_caixas_dia'] ?? 22500) }}</strong>
+                    </div>
+                </div>
+            </section>
+
             <section class="panel">
                 <div class="panel-title">
                     <div>
@@ -830,8 +857,12 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script>
+<script nonce="{{ $cspNonce ?? '' }}">
 document.addEventListener('DOMContentLoaded', function () {
+    if (typeof Chart === 'undefined') {
+        return;
+    }
+
     const dados = @json($dadosGraficos);
     const mensagemWhatsapp = @json($mensagemWhatsapp);
     const gridColor = 'rgba(148, 163, 184, 0.18)';
@@ -1067,6 +1098,56 @@ document.addEventListener('DOMContentLoaded', function () {
                         type: 'line',
                         label: `Meta ${formatCaixas(dados.caixasPorDiaMes.meta)}/dia`,
                         data: dados.caixasPorDiaMes.labels.map(() => dados.caixasPorDiaMes.meta),
+                        borderColor: '#ef4444',
+                        borderDash: [6, 4],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.dataset.label}: ${formatCaixas(ctx.raw)} caixas`
+                        }
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, title: { display: true, text: 'Dia' } },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: gridColor },
+                        ticks: { callback: (value) => formatCaixas(value) },
+                        title: { display: true, text: 'Caixas' }
+                    }
+                }
+            }
+        });
+    }
+
+    const chartCaixasOportunidadesDiaMes = document.getElementById('chartCaixasOportunidadesDiaMes');
+    if (chartCaixasOportunidadesDiaMes && dados.caixasOportunidadesPorDiaMes) {
+        new Chart(chartCaixasOportunidadesDiaMes, {
+            data: {
+                labels: dados.caixasOportunidadesPorDiaMes.labels,
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: 'Caixas de oportunidades',
+                        data: dados.caixasOportunidadesPorDiaMes.values,
+                        backgroundColor: '#2563eb',
+                        borderRadius: 5,
+                        maxBarThickness: 24
+                    },
+                    {
+                        type: 'line',
+                        label: `Meta ${formatCaixas(dados.caixasOportunidadesPorDiaMes.meta)}/dia`,
+                        data: dados.caixasOportunidadesPorDiaMes.labels.map(() => dados.caixasOportunidadesPorDiaMes.meta),
                         borderColor: '#ef4444',
                         borderDash: [6, 4],
                         borderWidth: 2,

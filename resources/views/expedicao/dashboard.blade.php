@@ -117,7 +117,13 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-<script>
+<script nonce="{{ $cspNonce ?? '' }}">
+document.addEventListener('DOMContentLoaded', function () {
+    if (typeof Chart === 'undefined') {
+        return;
+    }
+
+    const dataLabelsPlugin = typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : [];
     // Dados do PHP para JS
     const volume = @json($volume);
     const fos = @json($fosLiberadas);
@@ -144,7 +150,7 @@
                 }
             }
         },
-        plugins: [ChartDataLabels]
+        plugins: dataLabelsPlugin
     });
 
     // FOs liberadas
@@ -167,7 +173,7 @@
                 }
             }
         },
-        plugins: [ChartDataLabels]
+        plugins: dataLabelsPlugin
     });
 
     // Tempos médios (já formatados como string)
@@ -193,7 +199,7 @@
             },
             parsing: false, // necessário porque os dados são strings
         },
-        plugins: [ChartDataLabels]
+        plugins: dataLabelsPlugin
     });
     
 // Volume por Transportadora (barra horizontal)
@@ -232,7 +238,7 @@ new Chart(document.getElementById('graficoTransportadora'), {
             }
         }
     },
-    plugins: [ChartDataLabels]
+    plugins: dataLabelsPlugin
 });
 
 
@@ -272,9 +278,10 @@ new Chart(document.getElementById('graficoMotorista'), {
             }
         }
     },
-    plugins: [ChartDataLabels]
+    plugins: dataLabelsPlugin
 });
 
 
+});
 </script>
 @endpush
