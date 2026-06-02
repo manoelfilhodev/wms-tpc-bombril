@@ -65,11 +65,58 @@ class User extends Authenticatable
     public function hasPermission(string $permission): bool
     {
         if (! Schema::hasTable('roles') || ! Schema::hasTable('permissions') || ! Schema::hasTable('role_permission')) {
-            return false;
+            return $this->hasLegacyPermission($permission);
         }
 
-        return $this->roles()
+        $hasDatabasePermission = $this->roles()
             ->whereHas('permissions', fn ($query) => $query->where('name', $permission))
             ->exists();
+
+        return $hasDatabasePermission || $this->isLegacyAdmin();
+    }
+
+    private function hasLegacyPermission(string $permission): bool
+    {
+        if ($this->isLegacyAdmin()) {
+            return true;
+        }
+
+        $tipo = strtolower((string) $this->tipo);
+        $nivel = strtolower((string) $this->nivel);
+
+        $gestorPermissions = [
+            'demandas.view',
+            'demandas.edit',
+            'recebimento.view',
+            'recebimento.edit',
+            'kits.view',
+            'kits.edit',
+            'relatorios.view',
+            'etiquetas.view',
+        ];
+
+        if (in_array($tipo, ['gestor', 'supervisor'], true) || str_contains($nivel, 'gestor')) {
+            return in_array($permission, $gestorPermissions, true);
+        }
+
+        $operadorPermissions = [
+            'demandas.view',
+            'demandas.edit',
+            'recebimento.view',
+            'recebimento.edit',
+            'kits.view',
+            'kits.edit',
+            'etiquetas.view',
+        ];
+
+        return in_array($permission, $operadorPermissions, true);
+    }
+
+    private function isLegacyAdmin(): bool
+    {
+        $tipo = strtolower((string) $this->tipo);
+        $nivel = strtolower((string) $this->nivel);
+
+        return $tipo === 'admin' || str_contains($nivel, 'admin');
     }
 }
