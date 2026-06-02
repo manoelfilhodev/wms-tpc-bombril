@@ -2030,6 +2030,7 @@ class DemandaController extends Controller
 
         $metaCaixasHora = 1000;
         $metaCaixasDia = 22500;
+        $metaCaixasOportunidadeDia = 11000;
         $dataReferenciaKpi = $fim->copy()->startOfDay();
         $inicioDiaKpi = $dataReferenciaKpi->copy()->startOfDay();
         $fimDiaKpi = $dataReferenciaKpi->copy()->endOfDay();
@@ -2198,6 +2199,7 @@ class DemandaController extends Controller
             'variacao_volume' => $variacaoVolume,
             'meta_caixas_hora' => $metaCaixasHora,
             'meta_caixas_dia' => $metaCaixasDia,
+            'meta_caixas_oportunidade_dia' => $metaCaixasOportunidadeDia,
             'caixas_dia_kpi' => $totalCaixasDiaKpi,
             'media_caixas_hora' => $mediaCaixasHora,
             'caixas_mes' => $totalCaixasMes,
@@ -2315,7 +2317,7 @@ class DemandaController extends Controller
             'caixasOportunidadesPorDiaMes' => [
                 'labels' => $labelsDiasMes->values(),
                 'values' => $valoresOportunidadesDiasMes->values(),
-                'meta' => $metaCaixasDia,
+                'meta' => $metaCaixasOportunidadeDia,
                 'total' => $totalCaixasOportunidadesMes,
                 'media' => $mediaCaixasOportunidadesDiaMes,
                 'mes' => $dataReferenciaKpi->format('m/Y'),

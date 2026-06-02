@@ -212,7 +212,7 @@
                         <h2>Caixas de oportunidades por dia no mês</h2>
                         <p>Histórico mensal do picking considerando somente demandas não programadas.</p>
                     </div>
-                    <span class="badge-soft">Meta {{ $fmt($resumo['meta_caixas_dia'] ?? 22500) }}/dia</span>
+                    <span class="badge-soft">Meta {{ $fmt($resumo['meta_caixas_oportunidade_dia'] ?? 11000) }}/dia</span>
                 </div>
                 <div class="chart-box">
                     <canvas id="chartCaixasOportunidadesDiaMes"></canvas>
@@ -228,7 +228,7 @@
                     </div>
                     <div>
                         <span>Meta diária</span>
-                        <strong>{{ $fmt($resumo['meta_caixas_dia'] ?? 22500) }}</strong>
+                        <strong>{{ $fmt($resumo['meta_caixas_oportunidade_dia'] ?? 11000) }}</strong>
                     </div>
                 </div>
             </section>
