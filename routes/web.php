@@ -91,6 +91,33 @@ Route::middleware(['auth'])->prefix('expedicao')->name('expedicao.')->group(func
         ->name('programacoes.saida-veiculo.update');
 });
 
+Route::middleware(['auth'])->prefix('wms')->name('wms.')->group(function () {
+    Route::get('/separacao-inteligente', [\App\Http\Controllers\Wms\WmsSeparacaoInteligenteController::class, 'index'])
+        ->name('separacao-inteligente.index');
+    Route::post('/separacao-inteligente', [\App\Http\Controllers\Wms\WmsSeparacaoInteligenteController::class, 'store'])
+        ->name('separacao-inteligente.store');
+    Route::get('/separacao-inteligente/folhas/{folha}/imprimir', [\App\Http\Controllers\Wms\WmsSeparacaoInteligenteController::class, 'imprimir'])
+        ->name('separacao-inteligente.imprimir');
+    Route::get('/separacao-inteligente/{geracao}', [\App\Http\Controllers\Wms\WmsSeparacaoInteligenteController::class, 'show'])
+        ->name('separacao-inteligente.show');
+    Route::get('/skus', [\App\Http\Controllers\Wms\WmsSkuController::class, 'index'])
+        ->name('skus.index');
+    Route::get('/posicoes', [\App\Http\Controllers\Wms\WmsPosicaoController::class, 'index'])
+        ->name('posicoes.index');
+    Route::get('/sku-posicoes', [\App\Http\Controllers\Wms\WmsSkuPosicaoController::class, 'index'])
+        ->name('sku-posicoes.index');
+    Route::get('/sku-posicoes/importar', [\App\Http\Controllers\Wms\WmsSkuPosicaoController::class, 'importForm'])
+        ->name('sku-posicoes.importar');
+    Route::post('/sku-posicoes/importar', [\App\Http\Controllers\Wms\WmsSkuPosicaoController::class, 'importar'])
+        ->name('sku-posicoes.importar.store');
+    Route::get('/importacoes', [\App\Http\Controllers\Wms\WmsImportacaoController::class, 'index'])
+        ->name('importacoes.index');
+    Route::post('/importacoes/skus', [\App\Http\Controllers\Wms\WmsImportacaoController::class, 'skus'])
+        ->name('importacoes.skus');
+    Route::post('/importacoes/posicoes', [\App\Http\Controllers\Wms\WmsImportacaoController::class, 'posicoes'])
+        ->name('importacoes.posicoes');
+});
+
 Route::get('/usuarios/buscar', [UserController::class, 'buscarSeparadores'])
     ->name('usuarios.buscar')
     ->middleware('auth');

@@ -97,4 +97,9 @@ public function separadores()
         'id_user'
     )->withTimestamps();
 }
+
+public function wmsSeparacaoGeracoes()
+{
+    return $this->hasMany(\App\Models\Wms\WmsSeparacaoGeracao::class, 'demanda_id');
+}
 }
