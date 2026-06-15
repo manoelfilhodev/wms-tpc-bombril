@@ -326,13 +326,13 @@
                                                     data-bs-target="#modalDistribuicao{{ $d->id }}">{{ $d->fo }}</a>
                                                 @if (!empty($modoOperacional) && $canDeleteDt)
                                                     <button type="button"
-                                                        class="btn btn-sm btn-outline-danger btn-icon-delete-dt"
-                                                        data-bs-toggle="modal"
-                                                        data-bs-target="#modalDeleteDemanda{{ $d->id }}"
-                                                        title="Excluir DT"
-                                                        aria-label="Excluir DT {{ $d->fo }}">
-                                                        <i class="mdi mdi-trash-can-outline"></i>
-                                                    </button>
+    class="btn btn-sm btn-outline-pink btn-icon-delete-dt"
+    data-bs-toggle="modal"
+    data-bs-target="#modalDeleteDemanda{{ $d->id }}"
+    title="Excluir DT"
+    aria-label="Excluir DT {{ $d->fo }}">
+    <i class="mdi mdi-trash-can-outline"></i>
+</button>
                                                 @endif
                                             </div>
                                         </td>
@@ -1153,5 +1153,15 @@
             background: linear-gradient(135deg, #ff1a75, #e6005c);
             box-shadow: 0 0 10px rgba(255, 77, 166, 0.6);
         }
+        .btn-outline-pink {
+    color: #ff69b4;
+    border-color: #ff69b4;
+}
+
+.btn-outline-pink:hover {
+    background: #ff69b4;
+    border-color: #ff69b4;
+    color: #fff;
+}
     </style>
 @endsection
