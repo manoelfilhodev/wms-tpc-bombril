@@ -43,7 +43,8 @@ use App\Http\Controllers\{
     TransferenciaController,
     TransferenciaEtiquetaController,
     ApontamentoPaleteStretchController,
-    DispositivoAutorizadoController
+    DispositivoAutorizadoController,
+    SeparadorController
 };
 
 
@@ -527,6 +528,13 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/usuarios/{id}/editar', [UserController::class, 'edit'])->name('usuarios.edit');
     Route::put('/usuarios/{id}', [UserController::class, 'update'])->name('usuarios.update');
     Route::delete('/usuarios/{id}', [UserController::class, 'destroy'])->name('usuarios.destroy');
+
+    Route::get('/separadores', [SeparadorController::class, 'index'])->name('separadores.index');
+    Route::get('/separadores/novo', [SeparadorController::class, 'create'])->name('separadores.create');
+    Route::post('/separadores', [SeparadorController::class, 'store'])->name('separadores.store');
+    Route::get('/separadores/{separador}/editar', [SeparadorController::class, 'edit'])->name('separadores.edit');
+    Route::put('/separadores/{separador}', [SeparadorController::class, 'update'])->name('separadores.update');
+    Route::delete('/separadores/{separador}', [SeparadorController::class, 'destroy'])->name('separadores.destroy');
 
     Route::get('/dispositivos', [DispositivoAutorizadoController::class, 'index'])->name('dispositivos.index');
     Route::get('/dispositivos/novo', [DispositivoAutorizadoController::class, 'create'])->name('dispositivos.create');

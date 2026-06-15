@@ -7,6 +7,7 @@ use App\Models\Demanda;
 use App\Models\Expedicao\ExpedicaoProgramacao;
 use App\Services\Expedicao\TimelineDtService;
 use App\Services\SystemLogService;
+use App\Traits\ExpedicaoBuscaTrait;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -15,6 +16,8 @@ use Illuminate\Support\Collection;
 
 class SaidaVeiculoExpedicaoController extends Controller
 {
+    use ExpedicaoBuscaTrait;
+
     public function index(Request $request)
     {
         $busca = trim((string) $request->input('busca', ''));
@@ -25,12 +28,7 @@ class SaidaVeiculoExpedicaoController extends Controller
             ->with('ultimaPrevisao')
             ->whereExists(fn ($query) => $this->whereCarregamentoFinalizado($query))
             ->when($busca !== '', function ($query) use ($busca) {
-                $query->where(function ($query) use ($busca) {
-                    $query->where('fo', 'like', "%{$busca}%")
-                        ->orWhere('dt_sap', 'like', "%{$busca}%")
-                        ->orWhere('cidade_destino', 'like', "%{$busca}%")
-                        ->orWhere('cliente', 'like', "%{$busca}%");
-                });
+                $this->aplicarBuscaExpedicao($query, $busca, ['fo', 'dt_sap'], ['cidade_destino', 'cliente']);
             })
             ->orderByRaw('agenda_entrega_em IS NULL')
             ->orderBy('agenda_entrega_em');
@@ -254,11 +252,7 @@ class SaidaVeiculoExpedicaoController extends Controller
                     ->whereColumn('ep.fo', '_tb_demanda.fo');
             })
             ->when($busca !== '', function ($query) use ($busca) {
-                $query->where(function ($query) use ($busca) {
-                    $query->where('fo', 'like', "%{$busca}%")
-                        ->orWhere('cliente', 'like', "%{$busca}%")
-                        ->orWhere('transportadora', 'like', "%{$busca}%");
-                });
+                $this->aplicarBuscaExpedicao($query, $busca, ['fo'], ['cliente', 'transportadora']);
             });
     }
 

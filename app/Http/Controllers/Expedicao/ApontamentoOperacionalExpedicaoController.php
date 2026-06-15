@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Demanda;
 use App\Models\Expedicao\ExpedicaoProgramacao;
 use App\Services\SystemLogService;
+use App\Traits\ExpedicaoBuscaTrait;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -14,6 +15,8 @@ use Illuminate\Validation\Rule;
 
 class ApontamentoOperacionalExpedicaoController extends Controller
 {
+    use ExpedicaoBuscaTrait;
+
     public function index(Request $request)
     {
         $busca = trim((string) $request->input('busca', ''));
@@ -28,11 +31,7 @@ class ApontamentoOperacionalExpedicaoController extends Controller
             ->orderByDesc('agenda_entrega_em')
             ->when($tipoDemanda !== 'TODAS', fn ($query) => $query->where('tipo_demanda', $tipoDemanda))
             ->when($busca !== '', function ($query) use ($busca) {
-                $query->where(function ($query) use ($busca) {
-                    $query->where('fo', 'like', "%{$busca}%")
-                        ->orWhere('cidade_destino', 'like', "%{$busca}%")
-                        ->orWhere('cliente', 'like', "%{$busca}%");
-                });
+                $this->aplicarBuscaExpedicao($query, $busca, ['fo', 'dt_sap'], ['cidade_destino', 'cliente']);
             })
             ->whereExists(fn ($query) => $this->whereDemandaSeparada($query));
 
@@ -289,11 +288,7 @@ class ApontamentoOperacionalExpedicaoController extends Controller
                     ->whereColumn('ep.fo', '_tb_demanda.fo');
             })
             ->when($busca !== '', function ($query) use ($busca) {
-                $query->where(function ($query) use ($busca) {
-                    $query->where('fo', 'like', "%{$busca}%")
-                        ->orWhere('cliente', 'like', "%{$busca}%")
-                        ->orWhere('transportadora', 'like', "%{$busca}%");
-                });
+                $this->aplicarBuscaExpedicao($query, $busca, ['fo'], ['cliente', 'transportadora']);
             });
     }
 

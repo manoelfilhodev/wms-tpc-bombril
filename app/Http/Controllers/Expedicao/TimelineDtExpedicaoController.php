@@ -6,11 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Demanda;
 use App\Models\Expedicao\ExpedicaoProgramacao;
 use App\Services\Expedicao\TimelineDtService;
+use App\Traits\ExpedicaoBuscaTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class TimelineDtExpedicaoController extends Controller
 {
+    use ExpedicaoBuscaTrait;
+
     public function index(Request $request)
     {
         $busca = trim((string) $request->input('busca', ''));
@@ -27,14 +30,12 @@ class TimelineDtExpedicaoController extends Controller
         $this->aplicarFiltroTipoDemanda($base, $tipoDemanda);
 
         if ($busca !== '') {
-            $base->where(function ($query) use ($busca) {
-                $query->where('d.fo', 'like', "%{$busca}%")
-                    ->orWhere('ep.dt_sap', 'like', "%{$busca}%")
-                    ->orWhere('d.cliente', 'like', "%{$busca}%")
-                    ->orWhere('ep.cliente', 'like', "%{$busca}%")
-                    ->orWhere('ep.cidade_destino', 'like', "%{$busca}%")
-                    ->orWhere('ep.uf_destino', 'like', "%{$busca}%");
-            });
+            $this->aplicarBuscaExpedicao(
+                $base,
+                $busca,
+                ['d.fo', 'ep.dt_sap'],
+                ['d.cliente', 'ep.cliente', 'ep.cidade_destino', 'ep.uf_destino']
+            );
         }
 
         $dts = $base

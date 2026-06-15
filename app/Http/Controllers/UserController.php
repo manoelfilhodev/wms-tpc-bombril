@@ -249,20 +249,56 @@ class UserController extends Controller
     }
 
     public function buscarSeparadores(Request $request)
-{
-    $q = trim($request->get('q', ''));
+    {
+        $q = trim($request->get('q', ''));
 
-    $separadores = DB::table('_tb_separadores')
-        ->select('id', 'chapa', 'nome', 'cargo', 'turno')
-        ->when($q, function ($query) use ($q) {
-            $query->where('nome', 'like', "%{$q}%")
-                ->orWhere('chapa', 'like', "%{$q}%")
-                ->orWhere('cargo', 'like', "%{$q}%");
-        })
-        ->orderBy('nome')
-        ->limit(20)
-        ->get();
+        $cadastrados = DB::table('_tb_separadores')
+            ->select(['id', 'chapa', 'nome', 'cargo', 'turno'])
+            ->when($q !== '', function ($query) use ($q) {
+                $query->where(function ($query) use ($q) {
+                    $query->where('nome', 'like', "%{$q}%")
+                        ->orWhere('chapa', 'like', "%{$q}%")
+                        ->orWhere('cargo', 'like', "%{$q}%")
+                        ->orWhere('turno', 'like', "%{$q}%");
+                });
+            })
+            ->orderBy('nome')
+            ->limit(20)
+            ->get()
+            ->map(fn ($separador) => [
+                'id' => $separador->id,
+                'chapa' => $separador->chapa,
+                'nome' => $separador->nome,
+                'cargo' => $separador->cargo ?: 'Separador',
+                'turno' => $separador->turno,
+                'origem' => 'cadastro',
+            ]);
 
-    return response()->json($separadores);
-}
+        $historico = DB::table('_tb_demanda_distribuicoes')
+            ->selectRaw('MIN(id) as id, separador_nome as nome')
+            ->whereNotNull('separador_nome')
+            ->whereRaw("TRIM(separador_nome) <> ''")
+            ->when($q !== '', fn ($query) => $query->where('separador_nome', 'like', "%{$q}%"))
+            ->groupBy('separador_nome')
+            ->orderBy('separador_nome')
+            ->limit(20)
+            ->get()
+            ->map(fn ($separador) => [
+                'id' => 'historico-' . $separador->id,
+                'chapa' => 'historico',
+                'nome' => $separador->nome,
+                'cargo' => 'Separador',
+                'turno' => null,
+                'origem' => 'historico',
+            ]);
+
+        $separadores = $cadastrados
+            ->concat($historico)
+            ->unique(fn ($separador) => mb_strtoupper($separador['nome']))
+            ->sortBy('nome')
+            ->take(20)
+            ->values();
+
+        return response()->json($separadores);
+    }
 }

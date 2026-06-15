@@ -132,8 +132,8 @@
                 <div class="col-xl-7">
                     <form method="GET" class="row g-2 align-items-end">
                         <div class="col-md-4">
-                            <label class="form-label timeline-list-muted">Buscar DT, destino ou cliente</label>
-                            <input type="text" name="busca" class="form-control" value="{{ $busca }}" placeholder="Ex.: 251311087">
+                            <label class="form-label timeline-list-muted">Buscar DTs, destino ou cliente</label>
+                            <input type="text" name="busca" class="form-control" value="{{ $busca }}" placeholder="Ex.: 251311087, 251311088">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label timeline-list-muted">Status</label>

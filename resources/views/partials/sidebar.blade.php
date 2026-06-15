@@ -79,6 +79,13 @@
                         </a>
                     </li>
                     <li class="side-nav-item">
+                        <a href="{{ route('separadores.index') }}"
+                            class="side-nav-link {{ request()->routeIs('separadores.*') ? 'active' : '' }}">
+                            <i class="mdi mdi-account-hard-hat"></i>
+                            <span> Separadores </span>
+                        </a>
+                    </li>
+                    <li class="side-nav-item">
                         <a href="{{ route('dispositivos.index') }}"
                             class="side-nav-link {{ request()->routeIs('dispositivos.*') ? 'active' : '' }}">
                             <i class="mdi mdi-monitor-cellphone"></i>

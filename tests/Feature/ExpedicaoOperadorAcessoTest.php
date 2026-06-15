@@ -148,6 +148,60 @@ class ExpedicaoOperadorAcessoTest extends TestCase
             ->assertDontSee('FO-EXP-FILA-003');
     }
 
+    public function test_filtros_da_expedicao_aceitam_varias_dts_no_mesmo_campo(): void
+    {
+        $operador = $this->createOperator();
+
+        $this->actingAs($operador)->withSession([
+            'tipo' => 'operador',
+            'nivel' => 'Operador',
+            'user_id' => $operador->id_user,
+            'nome' => $operador->nome,
+            'unidade' => $operador->unidade_id,
+        ]);
+
+        $this->criarProgramacaoComDemanda('FO-EXP-MULTI-001', [
+            'separacao_finalizada_em' => now()->subHours(4),
+            'conferencia_finalizada_em' => now()->subHours(3),
+            'carregamento_finalizado_em' => now()->subHour(),
+            'saida_veiculo_em' => null,
+        ]);
+
+        $this->criarProgramacaoComDemanda('FO-EXP-MULTI-002', [
+            'separacao_finalizada_em' => now()->subHours(4),
+            'conferencia_finalizada_em' => now()->subHours(3),
+            'carregamento_finalizado_em' => now()->subHour(),
+            'saida_veiculo_em' => null,
+        ]);
+
+        $this->criarProgramacaoComDemanda('FO-EXP-MULTI-003', [
+            'separacao_finalizada_em' => now()->subHours(4),
+            'conferencia_finalizada_em' => now()->subHours(3),
+            'carregamento_finalizado_em' => now()->subHour(),
+            'saida_veiculo_em' => null,
+        ]);
+
+        $busca = 'FO-EXP-MULTI-001, FO-EXP-MULTI-002';
+
+        $this->get(route('expedicao.apontamentos-operacionais.index', ['busca' => $busca]))
+            ->assertOk()
+            ->assertSee('FO-EXP-MULTI-001')
+            ->assertSee('FO-EXP-MULTI-002')
+            ->assertDontSee('FO-EXP-MULTI-003');
+
+        $this->get(route('expedicao.saida-veiculos.index', ['busca' => $busca]))
+            ->assertOk()
+            ->assertSee('FO-EXP-MULTI-001')
+            ->assertSee('FO-EXP-MULTI-002')
+            ->assertDontSee('FO-EXP-MULTI-003');
+
+        $this->get(route('expedicao.timeline-dts.index', ['busca' => $busca]))
+            ->assertOk()
+            ->assertSee('FO-EXP-MULTI-001')
+            ->assertSee('FO-EXP-MULTI-002')
+            ->assertDontSee('FO-EXP-MULTI-003');
+    }
+
     public function test_apontamento_exibe_dt_separada_sem_programacao_como_oportunidade(): void
     {
         $operador = $this->createOperator();

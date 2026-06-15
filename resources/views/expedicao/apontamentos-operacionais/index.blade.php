@@ -427,8 +427,8 @@
                 <div class="col-xl-6">
                     <form method="GET" class="row g-2 align-items-end">
                         <div class="col-md-5">
-                            <label for="busca" class="form-label exp-ops-muted">Buscar DT, destino ou cliente</label>
-                            <input type="text" name="busca" id="busca" class="form-control" value="{{ $busca }}" placeholder="Ex.: 251311087">
+                            <label for="busca" class="form-label exp-ops-muted">Buscar DTs, destino ou cliente</label>
+                            <input type="text" name="busca" id="busca" class="form-control" value="{{ $busca }}" placeholder="Ex.: 251311087, 251311088">
                         </div>
                         <div class="col-md-3">
                             <label for="status" class="form-label exp-ops-muted">Status</label>

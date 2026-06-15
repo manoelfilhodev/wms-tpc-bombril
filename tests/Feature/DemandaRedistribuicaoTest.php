@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Demanda;
 use App\Models\DemandaDistribuicao;
 use App\Models\DemandaItem;
+use App\Models\Separador;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -86,6 +87,59 @@ class DemandaRedistribuicaoTest extends TestCase
             'separador_nome' => 'Maria',
             'quantidade_pecas' => 200,
             'quantidade_skus' => 2,
+            'finalizado_em' => null,
+        ]);
+    }
+
+    public function test_busca_de_separadores_retorna_cadastros_e_historico_de_distribuicoes(): void
+    {
+        $admin = $this->createUser();
+        $this->actingAs($admin)
+            ->withSession(['tipo' => 'admin', 'nivel' => 'Admin']);
+
+        Separador::create([
+            'nome' => 'Separador Cadastrado',
+            'chapa' => 'SEP-' . uniqid(),
+            'cargo' => 'Separador',
+            'turno' => '1 turno',
+        ]);
+
+        $demanda = $this->createDemandaComPicking(200, 2);
+        DemandaDistribuicao::create([
+            'demanda_id' => $demanda->id,
+            'separador_nome' => 'Separador Historico',
+            'quantidade_pecas' => 200,
+            'quantidade_skus' => 2,
+        ]);
+
+        $this->getJson(route('usuarios.buscar', ['q' => 'Separador']))
+            ->assertOk()
+            ->assertJsonFragment(['nome' => 'Separador Cadastrado'])
+            ->assertJsonFragment(['nome' => 'Separador Historico']);
+    }
+
+    public function test_distribuicao_aceita_novo_separador_digitado_no_campo(): void
+    {
+        $this->actingAs($this->createUser())
+            ->withSession(['tipo' => 'admin', 'nivel' => 'Admin']);
+
+        $demanda = $this->createDemandaComPicking(300, 3);
+
+        $this->post(route('demandas.distribuir', $demanda->id), [
+            'distribuicoes' => [
+                [
+                    'separador_nome' => 'Novo Separador Operacional',
+                    'quantidade_pecas' => 300,
+                    'quantidade_skus' => 3,
+                ],
+            ],
+        ])->assertSessionHas('success');
+
+        $this->assertDatabaseHas('_tb_demanda_distribuicoes', [
+            'demanda_id' => $demanda->id,
+            'separador_nome' => 'Novo Separador Operacional',
+            'quantidade_pecas' => 300,
+            'quantidade_skus' => 3,
             'finalizado_em' => null,
         ]);
     }

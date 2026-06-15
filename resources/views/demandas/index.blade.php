@@ -774,9 +774,13 @@
                     processResults: function(data) {
                         return {
                             results: data.map(function(separador) {
+                                const detalhe = separador.chapa && separador.chapa !== 'historico'
+                                    ? ' - ' + separador.chapa
+                                    : '';
+
                                 return {
                                     id: separador.nome,
-                                    text: separador.nome + ' - ' + separador.chapa
+                                    text: separador.nome + detalhe
                                 };
                             })
                         };
