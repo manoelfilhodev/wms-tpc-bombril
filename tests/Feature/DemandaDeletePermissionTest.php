@@ -86,11 +86,31 @@ class DemandaDeletePermissionTest extends TestCase
             ->delete(route('demandas.destroy', $demanda->id), [
                 'password' => 'SenhaErrada!',
             ])
-            ->assertSessionHas('error', 'Senha inválida. A DT não foi excluída.');
+            ->assertSessionHas('error', 'Senha inválida para o usuário logado. A DT não foi excluída.');
 
         $this->assertDatabaseHas('_tb_demanda', [
             'id' => $demanda->id,
             'fo' => 'DT-DELETE-SENHA',
+        ]);
+    }
+
+    public function test_usuario_sem_senha_local_nao_exclui_dt(): void
+    {
+        $this->seed(RbacSeeder::class);
+        $demanda = Demanda::create($this->demandaData('DT-DELETE-SEM-SENHA'));
+        $gestor = $this->createUser('gestor', 'Gestor');
+        $gestor->forceFill(['password' => null])->save();
+
+        $this->actingAs($gestor)
+            ->withSession(['tipo' => 'gestor', 'nivel' => 'Gestor'])
+            ->delete(route('demandas.destroy', $demanda->id), [
+                'password' => 'Secret123!',
+            ])
+            ->assertSessionHas('error', 'Este usuário não possui senha local cadastrada para confirmar a exclusão.');
+
+        $this->assertDatabaseHas('_tb_demanda', [
+            'id' => $demanda->id,
+            'fo' => 'DT-DELETE-SEM-SENHA',
         ]);
     }
 

@@ -440,7 +440,7 @@
                                             </div>
                                             <label class="form-label small text-muted mb-1"
                                                 for="deletePassword{{ $d->id }}">
-                                                Digite sua senha para confirmar
+                                                Digite a senha do usuário logado ({{ Auth::user()?->nome ?? session('nome') }}) para confirmar
                                             </label>
                                             <input type="password" name="password" id="deletePassword{{ $d->id }}"
                                                 class="form-control" autocomplete="current-password" required>

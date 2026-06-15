@@ -276,8 +276,13 @@ class DemandaController extends Controller
             'password.required' => 'Informe sua senha para confirmar a exclusão da DT.',
         ]);
 
-        if (! Hash::check((string) $request->input('password'), (string) auth()->user()?->password)) {
-            return back()->with('error', 'Senha inválida. A DT não foi excluída.');
+        $usuario = auth()->user();
+        if (! filled($usuario?->password)) {
+            return back()->with('error', 'Este usuário não possui senha local cadastrada para confirmar a exclusão.');
+        }
+
+        if (! Hash::check((string) $request->input('password'), (string) $usuario->password)) {
+            return back()->with('error', 'Senha inválida para o usuário logado. A DT não foi excluída.');
         }
 
         $demanda = Demanda::findOrFail($id);
