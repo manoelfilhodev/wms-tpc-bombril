@@ -3,11 +3,7 @@
 @section('content')
     @php
         $isOperator = Auth::user()?->tipo === 'operador';
-        $perfilAtual = strtolower((string) (Auth::user()?->tipo ?? session('tipo')));
-        $nivelAtual = strtolower((string) (Auth::user()?->nivel ?? session('nivel')));
-        $canDeleteDt = in_array($perfilAtual, ['admin', 'gestor'], true)
-            || str_contains($nivelAtual, 'admin')
-            || str_contains($nivelAtual, 'gestor');
+        $canDeleteDt = Auth::check();
     @endphp
 
     <div class="container-fluid px-4 py-3">
@@ -440,7 +436,7 @@
                                             </div>
                                             <label class="form-label small text-muted mb-1"
                                                 for="deletePassword{{ $d->id }}">
-                                                Digite a senha do usuário logado ({{ Auth::user()?->nome ?? session('nome') }}) para confirmar
+                                                Digite a senha de um administrador para autorizar a exclusão
                                             </label>
                                             <input type="password" name="password" id="deletePassword{{ $d->id }}"
                                                 class="form-control" autocomplete="current-password" required>

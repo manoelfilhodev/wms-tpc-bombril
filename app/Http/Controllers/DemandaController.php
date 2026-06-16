@@ -266,23 +266,15 @@ class DemandaController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        if (! $this->usuarioPodeExcluirDemanda()) {
-            abort(403, 'Apenas perfis admin ou gestor podem excluir DTs.');
-        }
-
         $request->validate([
             'password' => 'required|string',
         ], [
-            'password.required' => 'Informe sua senha para confirmar a exclusão da DT.',
+            'password.required' => 'Informe a senha de um administrador para confirmar a exclusão da DT.',
         ]);
 
-        $usuario = auth()->user();
-        if (! filled($usuario?->password)) {
-            return back()->with('error', 'Este usuário não possui senha local cadastrada para confirmar a exclusão.');
-        }
-
-        if (! Hash::check((string) $request->input('password'), (string) $usuario->password)) {
-            return back()->with('error', 'Senha inválida para o usuário logado. A DT não foi excluída.');
+        $adminAutorizador = $this->adminAutorizadorPorSenha((string) $request->input('password'));
+        if (! $adminAutorizador) {
+            return back()->with('error', 'Senha de administrador inválida. A DT não foi excluída.');
         }
 
         $demanda = Demanda::findOrFail($id);
@@ -309,7 +301,11 @@ class DemandaController extends Controller
             'entity_type' => 'demanda',
             'entity_id' => $oldValues['id'],
             'old_values' => $oldValues,
-            'new_values' => ['excluida' => true],
+            'new_values' => [
+                'excluida' => true,
+                'solicitada_por' => auth()->user()?->only(['id_user', 'nome', 'email']),
+                'autorizada_por_admin' => $adminAutorizador->only(['id_user', 'nome', 'email']),
+            ],
         ]);
 
         return back()->with('success', "DT {$oldValues['fo']} excluída com sucesso.");
@@ -1084,15 +1080,21 @@ class DemandaController extends Controller
         return Carbon::parse($demanda->separacao_iniciada_em)->gte(Demanda::DATA_OPERACIONAL_MINIMA);
     }
 
-    private function usuarioPodeExcluirDemanda(): bool
+    private function adminAutorizadorPorSenha(string $password): ?User
     {
-        $user = auth()->user();
-        $tipo = strtolower((string) ($user?->tipo ?? session('tipo')));
-        $nivel = strtolower((string) ($user?->nivel ?? session('nivel')));
-
-        return in_array($tipo, ['admin', 'gestor'], true)
-            || str_contains($nivel, 'admin')
-            || str_contains($nivel, 'gestor');
+        return User::query()
+            ->whereNotNull('password')
+            ->where(function ($status) {
+                $status->where('status', 1)
+                    ->orWhere('status', 'ativo');
+            })
+            ->where(function ($admin) {
+                $admin->where('tipo', 'admin')
+                    ->orWhere('nivel', 'like', '%admin%')
+                    ->orWhereHas('roles.permissions', fn ($permission) => $permission->where('name', 'admin.access'));
+            })
+            ->get()
+            ->first(fn (User $user) => Hash::check($password, (string) $user->password));
     }
 
     public function dashboardOperacional()
