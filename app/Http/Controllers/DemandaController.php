@@ -2149,6 +2149,7 @@ class DemandaController extends Controller
         $metaCaixasHora = 1000;
         $metaCaixasDia = 22500;
         $metaCaixasOportunidadeDia = 11000;
+        $metaVeiculosDia = 80;
         $dataReferenciaKpi = $fim->copy()->startOfDay();
         $inicioDiaKpi = $dataReferenciaKpi->copy()->startOfDay();
         $fimDiaKpi = $dataReferenciaKpi->copy()->endOfDay();
@@ -2207,6 +2208,19 @@ class DemandaController extends Controller
             ->orderBy('dia')
             ->pluck('caixas', 'dia');
 
+        $dateExprDemandaCriada = $this->dateExpr('created_at');
+        $caixasDisponiveisPorDiaMesQuery = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereBetween('created_at', [$inicioMesKpi, $fimMesKpi]);
+        $this->aplicarFiltroTipoDemandaEloquent($caixasDisponiveisPorDiaMesQuery, $tipoDemanda);
+
+        $caixasDisponiveisPorDiaMesRaw = $caixasDisponiveisPorDiaMesQuery
+            ->selectRaw("{$dateExprDemandaCriada} as dia")
+            ->selectRaw('SUM(COALESCE(quantidade, 0)) as caixas')
+            ->groupBy('dia')
+            ->orderBy('dia')
+            ->pluck('caixas', 'dia');
+
         $baseCaixasMesOportunidades = DB::table('_tb_demanda_distribuicoes as dd')
             ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
             ->where('d.possui_sobra', true)
@@ -2234,15 +2248,59 @@ class DemandaController extends Controller
             ->orderBy('dia')
             ->pluck('caixas', 'dia');
 
+        $caixasOportunidadesDisponiveisPorDiaMesRaw = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereBetween('created_at', [$inicioMesKpi, $fimMesKpi])
+            ->whereNotExists(function ($subquery) {
+                $subquery->selectRaw('1')
+                    ->from('_tb_expedicao_programacoes as ep')
+                    ->whereColumn('ep.fo', '_tb_demanda.fo')
+                    ->where('ep.tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA);
+            })
+            ->selectRaw("{$dateExprDemandaCriada} as dia")
+            ->selectRaw('SUM(COALESCE(quantidade, 0)) as caixas')
+            ->groupBy('dia')
+            ->orderBy('dia')
+            ->pluck('caixas', 'dia');
+
+        $dateExprProgramacao = $this->dateExpr('_tb_expedicao_programacoes.agenda_entrega_em');
+        $veiculosProgramadosPorDiaRaw = ExpedicaoProgramacao::query()
+            ->whereBetween('agenda_entrega_em', [$inicioMesKpi, $fimMesKpi])
+            ->when($tipoDemanda !== 'TODAS', fn ($query) => $query->where('tipo_demanda', $tipoDemanda))
+            ->selectRaw("{$dateExprProgramacao} as dia")
+            ->selectRaw('COUNT(*) as total')
+            ->groupBy('dia')
+            ->orderBy('dia')
+            ->pluck('total', 'dia');
+
+        $veiculosRealizadosPorDiaRaw = ExpedicaoProgramacao::query()
+            ->join('_tb_demanda as d', 'd.fo', '=', '_tb_expedicao_programacoes.fo')
+            ->whereBetween('_tb_expedicao_programacoes.agenda_entrega_em', [$inicioMesKpi, $fimMesKpi])
+            ->whereNotNull('d.carregamento_finalizado_em')
+            ->when($tipoDemanda !== 'TODAS', fn ($query) => $query->where('_tb_expedicao_programacoes.tipo_demanda', $tipoDemanda))
+            ->selectRaw("{$dateExprProgramacao} as dia")
+            ->selectRaw('COUNT(DISTINCT _tb_expedicao_programacoes.id) as total')
+            ->groupBy('dia')
+            ->orderBy('dia')
+            ->pluck('total', 'dia');
+
         $labelsDiasMes = collect();
         $valoresDiasMes = collect();
+        $disponiveisDiasMes = collect();
         $valoresOportunidadesDiasMes = collect();
+        $disponiveisOportunidadesDiasMes = collect();
+        $veiculosProgramadosDiasMes = collect();
+        $veiculosRealizadosDiasMes = collect();
         $cursorMes = $inicioMesKpi->copy();
         while ($cursorMes <= $fimMesKpi) {
             $diaKey = $cursorMes->toDateString();
             $labelsDiasMes->push($cursorMes->format('d/m'));
             $valoresDiasMes->push((int) ($caixasPorDiaMesRaw[$diaKey] ?? 0));
+            $disponiveisDiasMes->push((int) ($caixasDisponiveisPorDiaMesRaw[$diaKey] ?? 0));
             $valoresOportunidadesDiasMes->push((int) ($caixasOportunidadesPorDiaMesRaw[$diaKey] ?? 0));
+            $disponiveisOportunidadesDiasMes->push((int) ($caixasOportunidadesDisponiveisPorDiaMesRaw[$diaKey] ?? 0));
+            $veiculosProgramadosDiasMes->push((int) ($veiculosProgramadosPorDiaRaw[$diaKey] ?? 0));
+            $veiculosRealizadosDiasMes->push((int) ($veiculosRealizadosPorDiaRaw[$diaKey] ?? 0));
             $cursorMes->addDay();
         }
 
@@ -2318,6 +2376,7 @@ class DemandaController extends Controller
             'meta_caixas_hora' => $metaCaixasHora,
             'meta_caixas_dia' => $metaCaixasDia,
             'meta_caixas_oportunidade_dia' => $metaCaixasOportunidadeDia,
+            'meta_veiculos_dia' => $metaVeiculosDia,
             'caixas_dia_kpi' => $totalCaixasDiaKpi,
             'media_caixas_hora' => $mediaCaixasHora,
             'caixas_mes' => $totalCaixasMes,
@@ -2328,6 +2387,9 @@ class DemandaController extends Controller
             ? now()
             : $fim->copy();
         $capacidadeOperacional = app(CapacidadeOperacionalService::class)->analisar($referenciaCapacidade);
+        $metasDiarias = $this->montarMetasDiariasGerenciais($dataReferenciaKpi, $tipoDemanda, $metaCaixasDia, $metaVeiculosDia);
+        $previsibilidadeOperacional = $this->montarPrevisibilidadeGerencial($dataReferenciaKpi, $tipoDemanda);
+        $projecaoProdutividade12h = app(DashboardService::class)->getProjecaoProdutividade($dataReferenciaKpi);
 
         $pontosAtencao = collect();
         if ($resumo['backlog_aberto'] > 0) {
@@ -2364,6 +2426,14 @@ class DemandaController extends Controller
             'Aguardando expedição: ' . number_format($resumo['separadas_aguardando_expedicao'], 0, ',', '.'),
             'Backlog separação: ' . number_format($resumo['backlog_aberto'], 0, ',', '.'),
             'Caixas/peças: ' . number_format($resumo['pecas'], 0, ',', '.'),
+            'Separação disponível: ' . number_format(data_get($metasDiarias, 'separacao.realizado', 0), 0, ',', '.')
+                . ' / ' . number_format(data_get($metasDiarias, 'separacao.disponibilidade', 0), 0, ',', '.')
+                . ' caixas | Meta: ' . number_format(data_get($metasDiarias, 'separacao.meta', 0), 0, ',', '.')
+                . ' | Projeção: ' . number_format(data_get($metasDiarias, 'separacao.projecao_fechamento', 0), 0, ',', '.'),
+            'Expedição disponível: ' . number_format(data_get($metasDiarias, 'expedicao.realizado', 0), 0, ',', '.')
+                . ' / ' . number_format(data_get($metasDiarias, 'expedicao.disponibilidade', 0), 0, ',', '.')
+                . ' veículos | Meta: ' . number_format(data_get($metasDiarias, 'expedicao.meta', 0), 0, ',', '.')
+                . ' | Projeção: ' . number_format(data_get($metasDiarias, 'expedicao.projecao_fechamento', 0), 0, ',', '.'),
             'Caixas no dia: ' . number_format($resumo['caixas_dia_kpi'], 0, ',', '.') . ' | Meta diária: ' . number_format($metaCaixasDia, 0, ',', '.'),
             'Média caixas/hora: ' . number_format($resumo['media_caixas_hora'], 1, ',', '.') . ' | Meta hora: ' . number_format($metaCaixasHora, 0, ',', '.'),
             'SKUs: ' . number_format($resumo['skus'], 0, ',', '.'),
@@ -2424,10 +2494,16 @@ class DemandaController extends Controller
                 'media' => $mediaCaixasHora,
                 'data' => $dataReferenciaKpi->format('d/m/Y'),
             ],
+            'previsibilidade' => $previsibilidadeOperacional,
+            'projecaoProdutividade12h' => $projecaoProdutividade12h,
+            'metasDiarias' => $metasDiarias,
             'caixasPorDiaMes' => [
                 'labels' => $labelsDiasMes->values(),
                 'values' => $valoresDiasMes->values(),
+                'disponibilidadeValues' => $disponiveisDiasMes->values(),
+                'metaValues' => $labelsDiasMes->map(fn () => $metaCaixasDia)->values(),
                 'meta' => $metaCaixasDia,
+                'disponibilidade_total' => (int) $disponiveisDiasMes->sum(),
                 'total' => $totalCaixasMes,
                 'media' => $mediaCaixasDiaMes,
                 'mes' => $dataReferenciaKpi->format('m/Y'),
@@ -2435,9 +2511,22 @@ class DemandaController extends Controller
             'caixasOportunidadesPorDiaMes' => [
                 'labels' => $labelsDiasMes->values(),
                 'values' => $valoresOportunidadesDiasMes->values(),
+                'disponibilidadeValues' => $disponiveisOportunidadesDiasMes->values(),
+                'metaValues' => $labelsDiasMes->map(fn () => $metaCaixasOportunidadeDia)->values(),
                 'meta' => $metaCaixasOportunidadeDia,
+                'disponibilidade_total' => (int) $disponiveisOportunidadesDiasMes->sum(),
                 'total' => $totalCaixasOportunidadesMes,
                 'media' => $mediaCaixasOportunidadesDiaMes,
+                'mes' => $dataReferenciaKpi->format('m/Y'),
+            ],
+            'veiculosPorDiaMes' => [
+                'labels' => $labelsDiasMes->values(),
+                'metaValues' => $labelsDiasMes->map(fn () => $metaVeiculosDia)->values(),
+                'programados' => $veiculosProgramadosDiasMes->values(),
+                'realizados' => $veiculosRealizadosDiasMes->values(),
+                'meta' => $metaVeiculosDia,
+                'total_programado' => (int) $veiculosProgramadosDiasMes->sum(),
+                'total_realizado' => (int) $veiculosRealizadosDiasMes->sum(),
                 'mes' => $dataReferenciaKpi->format('m/Y'),
             ],
         ];
@@ -2455,6 +2544,8 @@ class DemandaController extends Controller
             'resumo' => $resumo,
             'visaoDemanda' => $visaoDemanda,
             'capacidadeOperacional' => $capacidadeOperacional,
+            'metasDiarias' => $metasDiarias,
+            'previsibilidadeOperacional' => $previsibilidadeOperacional,
             'produtividade' => $produtividade,
             'pontosAtencao' => $pontosAtencao,
             'dadosGraficos' => $dadosGraficos,
@@ -2954,6 +3045,267 @@ class DemandaController extends Controller
             'total_separado' => $programadasSeparadas + $oportunidadesSeparadas,
             'total_expedido' => $programadasExpedidas + $oportunidadesExpedidas,
             'total_planejado_antecipado' => $programadasTotal + $oportunidadesTotal,
+        ];
+    }
+
+    private function montarMetasDiariasGerenciais(Carbon $dataReferencia, string $tipoDemanda, int $metaCaixasDia, int $metaVeiculosDia): array
+    {
+        $inicioDia = $dataReferencia->copy()->setTime(0, 1, 0);
+        $fimDia = $dataReferencia->copy()->setTime(23, 59, 59);
+        $agora = now();
+
+        if ($dataReferencia->isSameDay($agora)) {
+            $referencia = $agora->copy();
+            if ($referencia->lessThan($inicioDia)) {
+                $referencia = $inicioDia->copy();
+            } elseif ($referencia->greaterThan($fimDia)) {
+                $referencia = $fimDia->copy();
+            }
+        } elseif ($dataReferencia->lessThan($agora->copy()->startOfDay())) {
+            $referencia = $fimDia->copy();
+        } else {
+            $referencia = $inicioDia->copy();
+        }
+
+        $totalMinutosDia = max(1, $inicioDia->diffInMinutes($fimDia));
+        $minutosDecorridos = max(0, min($totalMinutosDia, $inicioDia->diffInMinutes($referencia)));
+        $fatorDecorrido = min(1, max(0, $minutosDecorridos / $totalMinutosDia));
+
+        $marcos = collect([$inicioDia->copy()]);
+        for ($hora = 1; $hora <= 23; $hora++) {
+            $marcos->push($dataReferencia->copy()->setTime($hora, 0, 0));
+        }
+        $marcos->push($fimDia->copy());
+
+        $programacaoDia = ExpedicaoProgramacao::query()
+            ->whereBetween('agenda_entrega_em', [$inicioDia, $fimDia]);
+
+        if ($tipoDemanda !== 'TODAS') {
+            $programacaoDia->where('tipo_demanda', $tipoDemanda);
+        }
+
+        $disponibilidadeVeiculos = (int) (clone $programacaoDia)->count();
+
+        $veiculosCarregadosAte = function (Carbon $limite) use ($inicioDia, $fimDia, $tipoDemanda): int {
+            $query = DB::table('_tb_expedicao_programacoes as ep')
+                ->join('_tb_demanda as d', 'd.fo', '=', 'ep.fo')
+                ->whereBetween('ep.agenda_entrega_em', [$inicioDia, $fimDia])
+                ->whereBetween('d.carregamento_finalizado_em', [$inicioDia, $limite]);
+
+            if ($tipoDemanda !== 'TODAS') {
+                $query->where('ep.tipo_demanda', $tipoDemanda);
+            }
+
+            return (int) $query->distinct('ep.id')->count('ep.id');
+        };
+
+        $demandasDia = Demanda::query()
+            ->where('possui_sobra', true)
+            ->whereBetween('created_at', [$inicioDia, $fimDia]);
+        $this->aplicarFiltroTipoDemandaEloquent($demandasDia, $tipoDemanda);
+
+        $disponibilidadeCaixas = (int) (clone $demandasDia)->sum('quantidade');
+
+        $caixasSeparadasAte = function (Carbon $limite) use ($inicioDia, $fimDia, $tipoDemanda): int {
+            $query = DB::table('_tb_demanda_distribuicoes as dd')
+                ->join('_tb_demanda as d', 'd.id', '=', 'dd.demanda_id')
+                ->where('d.possui_sobra', true)
+                ->whereBetween('d.created_at', [$inicioDia, $fimDia])
+                ->whereBetween('dd.finalizado_em', [$inicioDia, $limite]);
+            $this->aplicarFiltroTipoDemandaSql($query, $tipoDemanda, 'd');
+
+            return (int) $query->sum('dd.quantidade_pecas');
+        };
+
+        $montarSetor = function (string $label, string $unidade, int $meta, int $disponibilidade, int $realizado, callable $realizadoAte) use ($marcos, $totalMinutosDia, $inicioDia, $referencia, $fatorDecorrido): array {
+            $esperadoAgora = (int) round($disponibilidade * $fatorDecorrido);
+            $ritmoHora = $disponibilidade > 0 ? round($disponibilidade / ($totalMinutosDia / 60), 1) : 0;
+            $projecaoFechamento = $fatorDecorrido > 0
+                ? (int) round($realizado / $fatorDecorrido)
+                : 0;
+
+            if ($fatorDecorrido >= 0.999) {
+                $projecaoFechamento = $realizado;
+            }
+
+            $percentual = $disponibilidade > 0 ? round(($realizado / $disponibilidade) * 100, 1) : 0;
+            $percentualProjetado = $disponibilidade > 0 ? round(($projecaoFechamento / $disponibilidade) * 100, 1) : 0;
+            $percentualMeta = $meta > 0 ? round(($realizado / $meta) * 100, 1) : 0;
+            $percentualDisponibilidadeMeta = $meta > 0 ? round(($disponibilidade / $meta) * 100, 1) : 0;
+
+            $status = 'neutral';
+            if ($disponibilidade > 0) {
+                $status = $realizado >= $esperadoAgora
+                    ? 'ok'
+                    : ($projecaoFechamento >= $disponibilidade ? 'warning' : 'danger');
+            }
+
+            $labels = [];
+            $ideal = [];
+            $real = [];
+            $projecao = [];
+
+            foreach ($marcos as $marco) {
+                $labels[] = $marco->format('H:i');
+                $fatorMarco = min(1, max(0, $inicioDia->diffInMinutes($marco) / $totalMinutosDia));
+                $ideal[] = (int) round($disponibilidade * $fatorMarco);
+
+                if ($marco->lessThanOrEqualTo($referencia)) {
+                    $real[] = $realizadoAte($marco);
+                    $projecao[] = null;
+                    continue;
+                }
+
+                $real[] = null;
+                $projecao[] = $fatorDecorrido > 0
+                    ? (int) round($projecaoFechamento * $fatorMarco)
+                    : null;
+            }
+
+            return [
+                'label' => $label,
+                'unidade' => $unidade,
+                'meta' => $meta,
+                'disponibilidade' => $disponibilidade,
+                'realizado' => $realizado,
+                'esperado_agora' => $esperadoAgora,
+                'gap' => $realizado - $esperadoAgora,
+                'gap_meta' => $realizado - $meta,
+                'gap_disponibilidade' => $realizado - $disponibilidade,
+                'ritmo_hora' => $ritmoHora,
+                'projecao_fechamento' => $projecaoFechamento,
+                'percentual' => $percentual,
+                'percentual_projetado' => $percentualProjetado,
+                'percentual_meta' => $percentualMeta,
+                'percentual_disponibilidade_meta' => $percentualDisponibilidadeMeta,
+                'status' => $status,
+                'series' => [
+                    'labels' => $labels,
+                    'ideal' => $ideal,
+                    'real' => $real,
+                    'projecao' => $projecao,
+                    'meta' => array_fill(0, count($labels), $meta),
+                ],
+            ];
+        };
+
+        $realizadoVeiculos = $veiculosCarregadosAte($referencia);
+        $realizadoCaixas = $caixasSeparadasAte($referencia);
+
+        return [
+            'data' => $dataReferencia->format('d/m/Y'),
+            'janela' => '00:01 - 23:59',
+            'referencia' => $referencia->format('H:i'),
+            'separacao' => $montarSetor('Separação', 'caixas', $metaCaixasDia, $disponibilidadeCaixas, $realizadoCaixas, $caixasSeparadasAte),
+            'expedicao' => $montarSetor('Expedição', 'veículos', $metaVeiculosDia, $disponibilidadeVeiculos, $realizadoVeiculos, $veiculosCarregadosAte),
+        ];
+    }
+
+    private function montarPrevisibilidadeGerencial(Carbon $dataReferencia, string $tipoDemanda): array
+    {
+        $inicioDia = $dataReferencia->copy()->setTime(0, 1, 0);
+        $fimDia = $dataReferencia->copy()->setTime(23, 59, 59);
+        $dataOperacional = $dataReferencia->copy()->startOfDay();
+        $agora = now();
+
+        if ($dataReferencia->isSameDay($agora)) {
+            $referencia = $agora->copy();
+            if ($referencia->lessThan($inicioDia)) {
+                $referencia = $inicioDia->copy();
+            } elseif ($referencia->greaterThan($fimDia)) {
+                $referencia = $fimDia->copy();
+            }
+        } elseif ($dataReferencia->lessThan($agora->copy()->startOfDay())) {
+            $referencia = $fimDia->copy();
+        } else {
+            $referencia = $inicioDia->copy();
+        }
+
+        $programacoes = ExpedicaoProgramacao::query()
+            ->leftJoin('_tb_demanda as d', 'd.fo', '=', '_tb_expedicao_programacoes.fo')
+            ->whereBetween('_tb_expedicao_programacoes.agenda_entrega_em', [$inicioDia, $fimDia]);
+
+        if ($tipoDemanda !== 'TODAS') {
+            $programacoes->where('_tb_expedicao_programacoes.tipo_demanda', $tipoDemanda);
+        }
+
+        $linhas = $programacoes
+            ->select([
+                '_tb_expedicao_programacoes.fo',
+                '_tb_expedicao_programacoes.tipo_demanda',
+                '_tb_expedicao_programacoes.agenda_entrega_em',
+                '_tb_expedicao_programacoes.data_expedicao_em',
+                '_tb_expedicao_programacoes.created_at as programacao_created_at',
+                'd.created_at as demanda_created_at',
+                'd.separacao_finalizada_em',
+                'd.carregamento_iniciado_em',
+                'd.carregamento_finalizado_em',
+                'd.saida_veiculo_em',
+            ])
+            ->get();
+
+        $ocorreuAteReferencia = function ($valor) use ($referencia): bool {
+            if (empty($valor)) {
+                return false;
+            }
+
+            return Carbon::parse($valor)->lessThanOrEqualTo($referencia);
+        };
+
+        $naoOcorreuAteReferencia = fn ($valor): bool => ! $ocorreuAteReferencia($valor);
+        $total = $linhas->count();
+        $carregamento = $linhas->filter(fn ($item) => $ocorreuAteReferencia($item->carregamento_finalizado_em))->count();
+        $realizado = $carregamento;
+        $naPlanta = $linhas
+            ->filter(fn ($item) => $ocorreuAteReferencia($item->carregamento_iniciado_em)
+                && $naoOcorreuAteReferencia($item->carregamento_finalizado_em)
+                && $naoOcorreuAteReferencia($item->saida_veiculo_em))
+            ->count();
+        $separacao = $linhas->filter(fn ($item) => $ocorreuAteReferencia($item->separacao_finalizada_em))->count();
+        $agendaVencida = function ($item) use ($dataOperacional): bool {
+            if (empty($item->agenda_entrega_em)) {
+                return false;
+            }
+
+            $dataAgenda = Carbon::parse($item->agenda_entrega_em)->startOfDay();
+            $dataExpedicao = $item->data_expedicao_em ?? $item->demanda_created_at ?? $item->programacao_created_at ?? null;
+
+            if (! empty($dataExpedicao) && $dataAgenda->isSameDay(Carbon::parse($dataExpedicao))) {
+                return false;
+            }
+
+            return $dataAgenda->lt($dataOperacional);
+        };
+
+        $atrasadas = $linhas
+            ->filter(fn ($item) => $agendaVencida($item) && $naoOcorreuAteReferencia($item->saida_veiculo_em))
+            ->count();
+        $atrasoPresenca = $linhas
+            ->filter(fn ($item) => $agendaVencida($item)
+                && $naoOcorreuAteReferencia($item->carregamento_iniciado_em)
+                && $naoOcorreuAteReferencia($item->saida_veiculo_em))
+            ->count();
+        $programadas = $linhas->where('tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA)->count();
+        $oportunidades = $linhas->where('tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE)->count();
+
+        $percentual = fn (int $valor, int $base = null): float => ($base ?? $total) > 0
+            ? round(($valor / ($base ?? $total)) * 100, 1)
+            : 0;
+
+        return [
+            'data' => $dataReferencia->format('d/m/Y'),
+            'programadas' => $programadas,
+            'oportunidades' => $oportunidades,
+            'cards' => [
+                ['titulo' => 'Demanda dia', 'valor' => $total, 'detalhe' => "{$programadas} programadas | {$oportunidades} oportunidades", 'percentual' => $percentual($realizado), 'classe' => 'info'],
+                ['titulo' => 'Realizado', 'valor' => $realizado, 'detalhe' => 'veículos carregados', 'percentual' => $percentual($realizado), 'classe' => 'ok'],
+                ['titulo' => 'Na planta', 'valor' => $naPlanta, 'detalhe' => 'em carregamento/pátio operacional', 'percentual' => $percentual($naPlanta), 'classe' => 'ok'],
+                ['titulo' => 'Falta chegar', 'valor' => max(0, $total - $realizado - $naPlanta), 'detalhe' => 'programação - realizado - na planta', 'percentual' => $percentual(max(0, $total - $realizado - $naPlanta)), 'classe' => 'warning'],
+                ['titulo' => 'Atraso presença', 'valor' => $atrasoPresenca, 'detalhe' => 'agenda vencida sem início operacional', 'percentual' => $percentual($atrasoPresenca), 'classe' => 'danger'],
+                ['titulo' => 'Atrasadas', 'valor' => $atrasadas, 'detalhe' => 'fora do previsto', 'percentual' => $percentual($atrasadas), 'classe' => 'danger'],
+                ['titulo' => 'Separação', 'valor' => $separacao, 'detalhe' => 'DTs já separadas', 'percentual' => $percentual($separacao), 'classe' => 'ok'],
+                ['titulo' => 'Carregamento', 'valor' => $carregamento, 'detalhe' => 'DTs já carregadas', 'percentual' => $percentual($carregamento), 'classe' => 'ok'],
+            ],
         ];
     }
 

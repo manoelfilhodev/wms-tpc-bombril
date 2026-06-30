@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Expedicao;
 use App\Http\Controllers\Controller;
 use App\Models\Demanda;
 use App\Models\Expedicao\ExpedicaoProgramacao;
-use App\Models\Expedicao\ExpedicaoRota;
 use App\Services\Expedicao\PrevisaoExpedicaoService;
+use App\Services\Expedicao\RelatorioVeiculosPresentesService;
 use App\Services\Expedicao\ValidacaoOperacionalService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -56,17 +56,35 @@ class PrevisibilidadeExpedicaoController extends Controller
 
             $demanda = $demandasPorFo->get($programacao->fo);
 
-            $programacao->demanda = $demanda;
+            $programacao->setRelation('demanda', $demanda);
+            $previsaoService = app(PrevisaoExpedicaoService::class);
+
+            if ($programacao->exists && $previsaoService->preencherCodigoClientePorTransitTime($programacao)) {
+                $programacao->refresh();
+                $programacao->load('ultimaPrevisao');
+                $programacao->setRelation('demanda', $demanda);
+            }
+
+            $recalculoPorTransitTime = $programacao->exists
+                && $this->previsaoPrecisaRecalculoPorTransitTime($programacao);
 
             if (
-                $demanda &&
-                $recalculosExecutados < $maxRecalculosPorCarga &&
                 $programacao->exists &&
-                $this->previsaoPrecisaRecalculo($programacao)
+                (
+                    $recalculoPorTransitTime ||
+                    (
+                        $demanda &&
+                        $recalculosExecutados < $maxRecalculosPorCarga &&
+                        $this->previsaoPrecisaRecalculo($programacao)
+                    )
+                )
             ) {
                 try {
-                    $recalculosExecutados++;
-                    app(PrevisaoExpedicaoService::class)->calcular($programacao->id);
+                    if (! $recalculoPorTransitTime) {
+                        $recalculosExecutados++;
+                    }
+
+                    $previsaoService->calcular($programacao->id);
                     $programacao->load('ultimaPrevisao');
                 } catch (\Throwable $e) {
                     Log::warning('Falha ao recalcular previsão no painel de expedição.', [
@@ -75,6 +93,10 @@ class PrevisibilidadeExpedicaoController extends Controller
                     ]);
                 }
             }
+
+            $programacao->transit_time_base_min = $programacao->exists
+                ? $previsaoService->tempoViagemTransitTimeCliente($programacao)
+                : null;
 
             /*
             |--------------------------------------------------------------------------
@@ -239,9 +261,11 @@ class PrevisibilidadeExpedicaoController extends Controller
             $programacao->etapas_operacionais = $etapas;
             $programacao->desvio_acumulado_min = $desvioAcumuladoMin;
             $programacao->possui_anomalia_operacional = $possuiAnomaliaOperacional;
-            $programacao->agenda_vencida = $programacao->agenda_entrega_em
-                ? $programacao->agenda_entrega_em->isPast()
-                : false;
+            $programacao->agenda_vencida = $this->agendaVencidaPorData(
+                $programacao->agenda_entrega_em,
+                now(),
+                $programacao->data_expedicao_em ?? $demanda->created_at ?? $programacao->created_at ?? null
+            );
             $programacao->carregamento_concluido = (bool) $this->dataOperacionalValida($demanda->carregamento_finalizado_em ?? null);
             $programacao->saida_concluida = (bool) $this->dataOperacionalValida($demanda->saida_veiculo_em ?? null);
 
@@ -299,7 +323,10 @@ class PrevisibilidadeExpedicaoController extends Controller
 
             } elseif (
                 $programacao->ultimaPrevisao?->status === 'ERRO' &&
-                str_contains((string) $programacao->ultimaPrevisao->observacoes, 'Rota não encontrada')
+                (
+                    str_contains((string) $programacao->ultimaPrevisao->observacoes, 'Rota não encontrada') ||
+                    str_contains((string) $programacao->ultimaPrevisao->observacoes, 'Transit time não encontrado')
+                )
             ) {
 
                 $programacao->status_operacional = 'SEM_ROTA';
@@ -340,15 +367,16 @@ class PrevisibilidadeExpedicaoController extends Controller
             })
             ->values();
 
+        $resumoPresencaVeiculos = app(RelatorioVeiculosPresentesService::class)->resumo($programacoes);
         $resumoFinalizadas = $this->montarResumoFinalizadas($programacoes);
-        $resumoOperacional = $this->montarResumoOperacional($programacoes, $resumoFinalizadas);
+        $resumoOperacional = $this->montarResumoOperacional($programacoes, $resumoFinalizadas, $resumoPresencaVeiculos);
         $programacoes = $programacoes
             ->reject(fn ($programacao) => (bool) $programacao->carregamento_concluido)
             ->values();
 
         return view(
             'expedicao.previsibilidade.index',
-            compact('programacoes', 'resumoOperacional', 'tipoDemanda', 'resumoFinalizadas')
+            compact('programacoes', 'resumoOperacional', 'tipoDemanda', 'resumoFinalizadas', 'resumoPresencaVeiculos')
         );
     }
 
@@ -363,6 +391,22 @@ class PrevisibilidadeExpedicaoController extends Controller
         return $carbon->gte(self::DATA_OPERACIONAL_MINIMA) ? $carbon : null;
     }
 
+    private function agendaVencidaPorData($agenda, ?Carbon $dataReferencia = null, $dataExpedicao = null): bool
+    {
+        if (empty($agenda)) {
+            return false;
+        }
+
+        $dataReferencia ??= now();
+        $dataAgenda = Carbon::parse($agenda)->startOfDay();
+
+        if (! empty($dataExpedicao) && $dataAgenda->isSameDay(Carbon::parse($dataExpedicao))) {
+            return false;
+        }
+
+        return $dataAgenda->lt($dataReferencia->copy()->startOfDay());
+    }
+
     private function previsaoPrecisaRecalculo(ExpedicaoProgramacao $programacao): bool
     {
         $previsao = $programacao->ultimaPrevisao;
@@ -373,34 +417,42 @@ class PrevisibilidadeExpedicaoController extends Controller
 
         if (
             $previsao->status === 'ERRO' &&
-            str_contains((string) $previsao->observacoes, 'Rota não encontrada')
+            (
+                str_contains((string) $previsao->observacoes, 'Rota não encontrada') ||
+                str_contains((string) $previsao->observacoes, 'Transit time não encontrado')
+            )
         ) {
             return true;
         }
 
         if ($previsao->status === 'CALCULADO' && $previsao->tempo_viagem_min !== null) {
-            $cidadeOrigem = $this->normalizarTexto(config('services.expedicao_rotas.origin_city', 'Sao Bernardo do Campo'));
-            $cidadeDestino = $this->normalizarTexto($programacao->cidade_destino);
+            $service = app(PrevisaoExpedicaoService::class);
+            $tempoTransitTimeCliente = $service->tempoViagemTransitTimeCliente($programacao);
 
-            $rota = ExpedicaoRota::query()
-                ->where('ativo', true)
-                ->where('uf_origem', config('services.expedicao_rotas.origin_uf', 'SP'))
-                ->where('uf_destino', $programacao->uf_destino)
-                ->get()
-                ->first(function (ExpedicaoRota $rota) use ($cidadeOrigem, $cidadeDestino) {
-                    return $this->normalizarTexto($rota->cidade_origem) === $cidadeOrigem
-                        && $this->normalizarTexto($rota->cidade_destino) === $cidadeDestino;
-                });
+            if ($tempoTransitTimeCliente !== null) {
+                return (int) $tempoTransitTimeCliente !== (int) $previsao->tempo_viagem_min;
+            }
 
-            $tempoRotaAtual = app(PrevisaoExpedicaoService::class)->tempoViagemOperacionalCaminhao($rota);
-
-            return $tempoRotaAtual === null || (int) $tempoRotaAtual !== (int) $previsao->tempo_viagem_min;
+            return true;
         }
 
         return $previsao->status === 'ERRO'
             && $previsao->tempo_separacao_min === null
             && $previsao->tempo_conferencia_min === null
             && $previsao->tempo_carregamento_min === null;
+    }
+
+    private function previsaoPrecisaRecalculoPorTransitTime(ExpedicaoProgramacao $programacao): bool
+    {
+        $tempoTransitTimeCliente = app(PrevisaoExpedicaoService::class)->tempoViagemTransitTimeCliente($programacao);
+
+        if ($tempoTransitTimeCliente === null) {
+            return false;
+        }
+
+        $previsao = $programacao->ultimaPrevisao;
+
+        return ! $previsao || (int) $tempoTransitTimeCliente !== (int) $previsao->tempo_viagem_min;
     }
 
     private function normalizarTexto(?string $valor): string
@@ -411,22 +463,15 @@ class PrevisibilidadeExpedicaoController extends Controller
         return strtoupper($valor);
     }
 
-    private function montarResumoOperacional($programacoes, array $resumoFinalizadas): array
+    private function montarResumoOperacional($programacoes, array $resumoFinalizadas, array $resumoPresencaVeiculos): array
     {
         $total = $programacoes->count();
         $programadas = $programacoes->where('tipo_demanda', ExpedicaoProgramacao::TIPO_PROGRAMADA);
         $oportunidades = $programacoes->where('tipo_demanda', ExpedicaoProgramacao::TIPO_OPORTUNIDADE);
         $executadas = fn ($itens) => $itens->filter(fn ($programacao) => (bool) $programacao->saida_concluida)->count();
-        $riscoStatus = ['ATRASADO', 'ATENCAO', 'SEM_EXPLOSAO', 'SEM_ROTA', 'SEM_CRITERIO', 'ANOMALIA_OPERACIONAL'];
 
         $programadasExecutadas = $executadas($programadas);
         $oportunidadesExecutadas = $executadas($oportunidades);
-        $programadasRisco = $programadas
-            ->filter(fn ($programacao) => in_array($programacao->status_operacional, $riscoStatus, true))
-            ->count();
-        $oportunidadesRisco = $oportunidades
-            ->filter(fn ($programacao) => in_array($programacao->status_operacional, $riscoStatus, true))
-            ->count();
 
         $countEtapa = function (string $etapa) use ($programacoes): int {
             return $programacoes
@@ -439,43 +484,57 @@ class PrevisibilidadeExpedicaoController extends Controller
             ->count();
 
         $executadasTotal = $programadasExecutadas + $oportunidadesExecutadas;
-        $riscoTotal = $programadasRisco + $oportunidadesRisco;
         $atrasadas = $countStatus(['ATRASADO']);
-        $aguardandoSaida = (int) data_get($resumoFinalizadas, 'carregadas.total', 0);
         $saidasHoje = (int) data_get($resumoFinalizadas, 'com_saida.total', 0);
+        $veiculosNaPlanta = (int) data_get($resumoPresencaVeiculos, 'na_planta.total', 0);
+        $atrasadosSemPresenca = (int) data_get($resumoPresencaVeiculos, 'atrasados_sem_presenca.total', 0);
+        $totalRelatorioPresenca = (int) data_get($resumoPresencaVeiculos, 'total_relatorio', 0);
+        $faltaChegar = max(0, $total - $executadasTotal - $veiculosNaPlanta);
 
         $cards = [
             [
-                'titulo' => 'Demanda do Dia',
+                'titulo' => 'Demanda Dia',
                 'valor' => $total,
                 'percentual' => $this->percentualResumo($executadasTotal, $total),
                 'detalhe' => $programadas->count() . ' programadas | ' . $oportunidades->count() . ' oportunidades',
                 'icone' => 'mdi-calendar-check-outline',
                 'classe' => 'neutral',
+                'destaque' => true,
             ],
             [
-                'titulo' => 'Executadas',
+                'titulo' => 'Realizado',
                 'valor' => $executadasTotal,
                 'percentual' => $this->percentualResumo($executadasTotal, $total),
                 'detalhe' => 'Saída de veículo registrada hoje',
                 'icone' => 'mdi-truck-check-outline',
                 'classe' => 'ok',
+                'destaque' => true,
             ],
             [
-                'titulo' => 'Pendentes',
-                'valor' => max(0, $total - $executadasTotal),
-                'percentual' => $this->percentualResumo(max(0, $total - $executadasTotal), $total),
-                'detalhe' => 'Ainda exigem acompanhamento',
-                'icone' => 'mdi-progress-clock',
-                'classe' => max(0, $total - $executadasTotal) > 0 ? 'warning' : 'ok',
+                'titulo' => 'Na Planta',
+                'valor' => $veiculosNaPlanta,
+                'percentual' => $this->percentualResumo($veiculosNaPlanta, $totalRelatorioPresenca),
+                'detalhe' => $totalRelatorioPresenca . ' DTs no relatório',
+                'icone' => 'mdi-truck-outline',
+                'classe' => $veiculosNaPlanta > 0 ? 'ok' : 'neutral',
+                'destaque' => true,
             ],
             [
-                'titulo' => 'Em Risco',
-                'valor' => $riscoTotal,
-                'percentual' => $this->percentualResumo($riscoTotal, $total),
-                'detalhe' => $programadasRisco . ' programadas | ' . $oportunidadesRisco . ' oportunidades',
-                'icone' => 'mdi-alert-decagram-outline',
-                'classe' => $riscoTotal > 0 ? 'warning' : 'neutral',
+                'titulo' => 'Falta Chegar',
+                'valor' => $faltaChegar,
+                'percentual' => $this->percentualResumo($faltaChegar, $total),
+                'detalhe' => 'Programação - realizado - na planta',
+                'icone' => 'mdi-truck-fast-outline',
+                'classe' => $faltaChegar > 0 ? 'warning' : 'ok',
+                'destaque' => true,
+            ],
+            [
+                'titulo' => 'Atraso Presença',
+                'valor' => $atrasadosSemPresenca,
+                'percentual' => $this->percentualResumo($atrasadosSemPresenca, $total),
+                'detalhe' => 'Saída prevista vencida sem veículo na planta',
+                'icone' => 'mdi-alert-circle-outline',
+                'classe' => $atrasadosSemPresenca > 0 ? 'danger' : 'ok',
             ],
             [
                 'titulo' => 'Atrasadas',
@@ -502,28 +561,12 @@ class PrevisibilidadeExpedicaoController extends Controller
                 'classe' => 'ok',
             ],
             [
-                'titulo' => 'Conferência',
-                'valor' => $countEtapa('conferencia'),
-                'percentual' => $this->percentualResumo($countEtapa('conferencia'), $total),
-                'detalhe' => 'DTs já conferidas',
-                'icone' => 'mdi-clipboard-check-outline',
-                'classe' => 'ok',
-            ],
-            [
                 'titulo' => 'Carregamento',
                 'valor' => $countEtapa('carregamento'),
                 'percentual' => $this->percentualResumo($countEtapa('carregamento'), $total),
                 'detalhe' => 'DTs já carregadas',
                 'icone' => 'mdi-truck-outline',
                 'classe' => 'ok',
-            ],
-            [
-                'titulo' => 'Aguardando Saída',
-                'valor' => $aguardandoSaida,
-                'percentual' => $this->percentualResumo($aguardandoSaida, $total),
-                'detalhe' => 'Carregadas sem saída',
-                'icone' => 'mdi-clock-outline',
-                'classe' => $aguardandoSaida > 0 ? 'warning' : 'ok',
             ],
         ];
 
@@ -599,7 +642,7 @@ class PrevisibilidadeExpedicaoController extends Controller
             'origem_demanda' => ExpedicaoProgramacao::ORIGEM_IMPORTACAO_OPORTUNIDADE,
             'possui_picking' => true,
         ]);
-        $programacao->demanda = $demanda;
+        $programacao->setRelation('demanda', $demanda);
 
         return $programacao;
     }

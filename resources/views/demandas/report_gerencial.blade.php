@@ -23,6 +23,21 @@
     $topProdutividade = $produtividade->take(5)->values();
     $riscoLabel = $capacidadeOperacional['risco']['label'] ?? '-';
     $riscoClasse = str_contains(mb_strtoupper($riscoLabel), 'ALTO') ? 'danger' : (str_contains(mb_strtoupper($riscoLabel), 'MÉDIO') || str_contains(mb_strtoupper($riscoLabel), 'MEDIO') ? 'warning' : 'success');
+    $metaSeparacao = $metasDiarias['separacao'] ?? [];
+    $metaExpedicao = $metasDiarias['expedicao'] ?? [];
+    $cardsPrevisibilidade = collect($previsibilidadeOperacional['cards'] ?? []);
+    $classeMetaSeparacao = match ($metaSeparacao['status'] ?? 'neutral') {
+        'ok' => 'success',
+        'warning' => 'warning',
+        'danger' => 'danger',
+        default => '',
+    };
+    $classeMetaExpedicao = match ($metaExpedicao['status'] ?? 'neutral') {
+        'ok' => 'success',
+        'warning' => 'warning',
+        'danger' => 'danger',
+        default => '',
+    };
 @endphp
 
 @section('content')
@@ -34,7 +49,7 @@
             <div>
                 <span class="eyebrow">Picking / Operação</span>
                 <h1>One Page Gerencial</h1>
-                <p>Resumo executivo separado por etapa: picking/separação e expedição/carregamento.</p>
+                <p>Visão executiva do dia: meta, realizado, ritmo necessário e projeção de fechamento por setor.</p>
             </div>
             <div class="header-side">
                 <div class="period-box">
@@ -99,82 +114,156 @@
             </button>
         </form>
 
-        <div class="kpi-row">
-            <article class="kpi-card primary">
-                <span>Separação finalizada</span>
-                <strong>{{ $fmt($resumo['separadas'] ?? $resumo['finalizadas']) }}</strong>
-                <small>{{ $fmtPct($resumo['percentual_conclusao']) }} de conclusão no picking</small>
+        <section class="previsibilidade-block">
+            <div class="section-heading">
+                <div>
+                    <span class="eyebrow">Torre operacional</span>
+                    <h2>Previsibilidade da expedição</h2>
+                    <p>Painel operacional do dia, previsto x realizado.</p>
+                </div>
+                <span class="badge-soft">Data {{ $previsibilidadeOperacional['data'] ?? $fim->format('d/m/Y') }}</span>
+            </div>
+            <div class="previsibilidade-grid">
+                @foreach($cardsPrevisibilidade as $card)
+                    <article class="previs-card {{ $card['classe'] ?? '' }}">
+                        <div>
+                            <span>{{ $card['titulo'] }}</span>
+                            <strong>{{ $fmt($card['valor'] ?? 0) }}</strong>
+                            <small>{{ $card['detalhe'] ?? '' }}</small>
+                        </div>
+                        <b>{{ $fmtPct($card['percentual'] ?? 0) }}</b>
+                    </article>
+                @endforeach
+            </div>
+        </section>
+
+        <section class="gauge-overview">
+            <article class="gauge-card">
+                <div class="gauge-head">
+                    <span>Expedição disponível</span>
+                    <b>{{ $fmt($metaExpedicao['realizado'] ?? 0) }} / {{ $fmt($metaExpedicao['disponibilidade'] ?? 0) }}</b>
+                </div>
+                <div class="gauge-wrap"><canvas id="gaugeExpedicaoRealizada"></canvas></div>
+                <small>Meta operacional: {{ $fmt($metaExpedicao['meta'] ?? 0) }} veículos</small>
             </article>
-            <article class="kpi-card expedition">
-                <span>Expedição finalizada</span>
-                <strong>{{ $fmt($resumo['expedidas'] ?? 0) }}</strong>
-                <small>{{ $fmt($resumo['separadas_aguardando_expedicao'] ?? 0) }} separadas aguardando expedição</small>
+            <article class="gauge-card">
+                <div class="gauge-head">
+                    <span>Separação disponível</span>
+                    <b>{{ $fmt($metaSeparacao['realizado'] ?? 0) }} / {{ $fmt($metaSeparacao['disponibilidade'] ?? 0) }}</b>
+                </div>
+                <div class="gauge-wrap"><canvas id="gaugeSeparacaoRealizada"></canvas></div>
+                <small>Meta operacional: {{ $fmt($metaSeparacao['meta'] ?? 0) }} caixas</small>
             </article>
-            <article class="kpi-card">
-                <span>Caixas / peças</span>
-                <strong>{{ $fmt($resumo['pecas']) }}</strong>
-                <small>Volume apontado na separação</small>
+            <article class="gauge-card">
+                <div class="gauge-head">
+                    <span>Projeção expedição</span>
+                    <b>{{ $fmt($metaExpedicao['projecao_fechamento'] ?? 0) }}</b>
+                </div>
+                <div class="gauge-wrap"><canvas id="gaugeExpedicaoProjetada"></canvas></div>
+                <small>Contra programação disponível</small>
             </article>
-            <article class="kpi-card">
-                <span>SLA separação</span>
-                <strong>{{ $fmtPct($resumo['sla_no_dia']) }}</strong>
-                <small>{{ $fmt($resumo['finalizadas_fora_dia']) }} DTs separadas fora do dia</small>
+            <article class="gauge-card">
+                <div class="gauge-head">
+                    <span>Projeção separação</span>
+                    <b>{{ $fmt($metaSeparacao['projecao_fechamento'] ?? 0) }}</b>
+                </div>
+                <div class="gauge-wrap"><canvas id="gaugeSeparacaoProjetada"></canvas></div>
+                <small>Contra caixas disponíveis</small>
             </article>
-            <article class="kpi-card">
-                <span>Backlog separação</span>
-                <strong>{{ $fmt($resumo['backlog_aberto']) }}</strong>
-                <small>{{ $fmt($resumo['em_aberto_periodo']) }} abertas no período</small>
+            <article class="gauge-card donut-card">
+                <div class="gauge-head">
+                    <span>Composição do dia</span>
+                    <b>{{ $fmt($previsibilidadeOperacional['cards'][0]['valor'] ?? 0) }}</b>
+                </div>
+                <div class="donut-wrap"><canvas id="donutComposicaoDia"></canvas></div>
+                <small>Realizado, na planta e falta chegar</small>
             </article>
-            <article class="kpi-card risk {{ $riscoClasse }}">
-                <span>Risco operacional</span>
-                <strong>{{ $riscoLabel }}</strong>
-                <small>{{ $fmt($capacidadeOperacional['risco']['backlog_projetado'] ?? 0) }} backlog previsto</small>
-            </article>
-        </div>
+        </section>
 
         <main class="executive-grid">
-            <section class="panel span-2">
+            <section class="panel span-4">
                 <div class="panel-title">
                     <div>
-                        <h2>Evolução do período</h2>
-                        <p>DTs criadas x DTs separadas. Este gráfico não representa expedição finalizada.</p>
+                        <h2>Projeção de produtividade 12h-00h</h2>
+                        <p>Caixas separadas acumuladas contra curva ideal, projeção corrigida e meta de 11.000 caixas.</p>
                     </div>
-                    @if($resumo['variacao_volume'] !== null)
-                        <span class="badge-soft {{ $resumo['variacao_volume'] >= 0 ? 'good' : 'bad' }}">
-                            {{ $resumo['variacao_volume'] >= 0 ? '+' : '' }}{{ $fmtPct($resumo['variacao_volume']) }} vs período anterior
-                        </span>
-                    @else
-                        <span class="badge-soft">Sem base anterior</span>
-                    @endif
+                    <div class="badge-row">
+                        <span class="badge-soft">Separado: {{ $fmt($dadosGraficos['projecaoProdutividade12h']['produzido'] ?? 0) }}</span>
+                        <span class="badge-soft">Meta: {{ $fmt($dadosGraficos['projecaoProdutividade12h']['meta'] ?? 11000) }}</span>
+                        @if(!empty($dadosGraficos['projecaoProdutividade12h']['previsaoConclusao']))
+                            <span class="badge-soft good">Previsão: {{ $dadosGraficos['projecaoProdutividade12h']['previsaoConclusao'] }}</span>
+                        @endif
+                    </div>
                 </div>
-                <div class="chart-box">
-                    <canvas id="chartEvolucaoGerencial"></canvas>
+                <div class="chart-box chart-box-hero">
+                    <canvas id="chartProjecao12h"></canvas>
                 </div>
             </section>
 
             <section class="panel span-2">
                 <div class="panel-title">
                     <div>
-                        <h2>Caixas separadas por hora</h2>
-                        <p>Volume apontado no picking em {{ $dadosGraficos['caixasPorHora']['data'] ?? $fim->format('d/m/Y') }} versus meta média horária.</p>
+                        <h2>Disponibilidade diária da separação</h2>
+                        <p>Caixas separadas x caixas disponíveis para {{ $metasDiarias['data'] ?? $fim->format('d/m/Y') }}. Meta fixa em paralelo. Janela {{ $metasDiarias['janela'] ?? '00:01 - 23:59' }}.</p>
                     </div>
-                    <span class="badge-soft">Meta {{ $fmt($resumo['meta_caixas_hora'] ?? 1000) }}/hora</span>
+                    <div class="badge-row">
+                        <span class="badge-soft">Realizado: {{ $fmt($metaSeparacao['realizado'] ?? 0) }}</span>
+                        <span class="badge-soft">Disponível: {{ $fmt($metaSeparacao['disponibilidade'] ?? 0) }}</span>
+                        <span class="badge-soft">Meta: {{ $fmt($metaSeparacao['meta'] ?? 0) }}</span>
+                        <span class="badge-soft {{ ($metaSeparacao['gap'] ?? 0) >= 0 ? 'good' : 'bad' }}">
+                            Gap disp.: {{ ($metaSeparacao['gap_disponibilidade'] ?? 0) >= 0 ? '+' : '' }}{{ $fmt($metaSeparacao['gap_disponibilidade'] ?? 0) }}
+                        </span>
+                    </div>
                 </div>
-                <div class="chart-box">
-                    <canvas id="chartCaixasHora"></canvas>
+                <div class="chart-box chart-box-projection">
+                    <canvas id="chartMetaSeparacaoDiaria"></canvas>
                 </div>
                 <div class="mini-metrics three-cols compact">
                     <div>
-                        <span>Total do dia</span>
-                        <strong>{{ $fmt($resumo['caixas_dia_kpi'] ?? 0) }}</strong>
+                        <span>Ritmo/hora</span>
+                        <strong>{{ number_format((float) ($metaSeparacao['ritmo_hora'] ?? 0), 1, ',', '.') }}</strong>
                     </div>
                     <div>
-                        <span>Média/hora produtiva</span>
-                        <strong>{{ $fmt($resumo['media_caixas_hora'] ?? 0) }}</strong>
+                        <span>Disponível esperado</span>
+                        <strong>{{ $fmt($metaSeparacao['esperado_agora'] ?? 0) }}</strong>
                     </div>
                     <div>
-                        <span>Meta média</span>
-                        <strong>{{ $fmt($resumo['meta_caixas_hora'] ?? 1000) }}</strong>
+                        <span>Projeção</span>
+                        <strong>{{ $fmt($metaSeparacao['projecao_fechamento'] ?? 0) }}</strong>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel span-2">
+                <div class="panel-title">
+                    <div>
+                        <h2>Disponibilidade diária da expedição</h2>
+                        <p>Veículos carregados x programação disponível do dia. Meta fixa em paralelo. Janela {{ $metasDiarias['janela'] ?? '00:01 - 23:59' }}.</p>
+                    </div>
+                    <div class="badge-row">
+                        <span class="badge-soft">Carregados: {{ $fmt($metaExpedicao['realizado'] ?? 0) }}</span>
+                        <span class="badge-soft">Programados: {{ $fmt($metaExpedicao['disponibilidade'] ?? 0) }}</span>
+                        <span class="badge-soft">Meta: {{ $fmt($metaExpedicao['meta'] ?? 0) }}</span>
+                        <span class="badge-soft {{ ($metaExpedicao['gap'] ?? 0) >= 0 ? 'good' : 'bad' }}">
+                            Gap disp.: {{ ($metaExpedicao['gap_disponibilidade'] ?? 0) >= 0 ? '+' : '' }}{{ $fmt($metaExpedicao['gap_disponibilidade'] ?? 0) }}
+                        </span>
+                    </div>
+                </div>
+                <div class="chart-box chart-box-projection">
+                    <canvas id="chartMetaExpedicaoDiaria"></canvas>
+                </div>
+                <div class="mini-metrics three-cols compact">
+                    <div>
+                        <span>Ritmo/hora</span>
+                        <strong>{{ number_format((float) ($metaExpedicao['ritmo_hora'] ?? 0), 1, ',', '.') }}</strong>
+                    </div>
+                    <div>
+                        <span>Programado esperado</span>
+                        <strong>{{ $fmt($metaExpedicao['esperado_agora'] ?? 0) }}</strong>
+                    </div>
+                    <div>
+                        <span>Projeção</span>
+                        <strong>{{ $fmt($metaExpedicao['projecao_fechamento'] ?? 0) }}</strong>
                     </div>
                 </div>
             </section>
@@ -183,7 +272,7 @@
                 <div class="panel-title">
                     <div>
                         <h2>Caixas separadas por dia no mês</h2>
-                        <p>Histórico mensal do picking com linha de meta diária.</p>
+                        <p>Comparativo diário entre meta operacional, caixas disponíveis e realizado no picking.</p>
                     </div>
                     <span class="badge-soft">Meta {{ $fmt($resumo['meta_caixas_dia'] ?? 22500) }}/dia</span>
                 </div>
@@ -192,16 +281,43 @@
                 </div>
                 <div class="mini-metrics three-cols compact">
                     <div>
-                        <span>Total mês</span>
+                        <span>Disponível mês</span>
+                        <strong>{{ $fmt($dadosGraficos['caixasPorDiaMes']['disponibilidade_total'] ?? 0) }}</strong>
+                    </div>
+                    <div>
+                        <span>Realizado mês</span>
                         <strong>{{ $fmt($resumo['caixas_mes'] ?? 0) }}</strong>
                     </div>
                     <div>
-                        <span>Média diária</span>
-                        <strong>{{ $fmt($resumo['media_caixas_dia_mes'] ?? 0) }}</strong>
+                        <span>Atend. disp.</span>
+                        <strong>{{ $fmtPct(($dadosGraficos['caixasPorDiaMes']['disponibilidade_total'] ?? 0) > 0 ? (($dadosGraficos['caixasPorDiaMes']['total'] ?? 0) / ($dadosGraficos['caixasPorDiaMes']['disponibilidade_total'] ?? 1)) * 100 : 0) }}</strong>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel span-2">
+                <div class="panel-title">
+                    <div>
+                        <h2>Veículos por dia no mês</h2>
+                        <p>Comparativo diário entre meta operacional, veículos programados e veículos realizados.</p>
+                    </div>
+                    <span class="badge-soft">Meta {{ $fmt($dadosGraficos['veiculosPorDiaMes']['meta'] ?? 80) }}/dia</span>
+                </div>
+                <div class="chart-box">
+                    <canvas id="chartVeiculosDiaMes"></canvas>
+                </div>
+                <div class="mini-metrics three-cols compact">
+                    <div>
+                        <span>Programados mês</span>
+                        <strong>{{ $fmt($dadosGraficos['veiculosPorDiaMes']['total_programado'] ?? 0) }}</strong>
                     </div>
                     <div>
-                        <span>Meta diária</span>
-                        <strong>{{ $fmt($resumo['meta_caixas_dia'] ?? 22500) }}</strong>
+                        <span>Realizados mês</span>
+                        <strong>{{ $fmt($dadosGraficos['veiculosPorDiaMes']['total_realizado'] ?? 0) }}</strong>
+                    </div>
+                    <div>
+                        <span>Atend. prog.</span>
+                        <strong>{{ $fmtPct(($dadosGraficos['veiculosPorDiaMes']['total_programado'] ?? 0) > 0 ? (($dadosGraficos['veiculosPorDiaMes']['total_realizado'] ?? 0) / ($dadosGraficos['veiculosPorDiaMes']['total_programado'] ?? 1)) * 100 : 0) }}</strong>
                     </div>
                 </div>
             </section>
@@ -210,7 +326,7 @@
                 <div class="panel-title">
                     <div>
                         <h2>Caixas de oportunidades por dia no mês</h2>
-                        <p>Histórico mensal do picking considerando somente demandas não programadas.</p>
+                        <p>Meta operacional x disponibilidade x realizado de caixas em demandas não programadas.</p>
                     </div>
                     <span class="badge-soft">Meta {{ $fmt($resumo['meta_caixas_oportunidade_dia'] ?? 11000) }}/dia</span>
                 </div>
@@ -219,16 +335,16 @@
                 </div>
                 <div class="mini-metrics three-cols compact">
                     <div>
-                        <span>Total mês</span>
+                        <span>Disponível mês</span>
+                        <strong>{{ $fmt($dadosGraficos['caixasOportunidadesPorDiaMes']['disponibilidade_total'] ?? 0) }}</strong>
+                    </div>
+                    <div>
+                        <span>Realizado mês</span>
                         <strong>{{ $fmt($dadosGraficos['caixasOportunidadesPorDiaMes']['total'] ?? 0) }}</strong>
                     </div>
                     <div>
-                        <span>Média diária</span>
-                        <strong>{{ $fmt($dadosGraficos['caixasOportunidadesPorDiaMes']['media'] ?? 0) }}</strong>
-                    </div>
-                    <div>
-                        <span>Meta diária</span>
-                        <strong>{{ $fmt($resumo['meta_caixas_oportunidade_dia'] ?? 11000) }}</strong>
+                        <span>Atend. disp.</span>
+                        <strong>{{ $fmtPct(($dadosGraficos['caixasOportunidadesPorDiaMes']['disponibilidade_total'] ?? 0) > 0 ? (($dadosGraficos['caixasOportunidadesPorDiaMes']['total'] ?? 0) / ($dadosGraficos['caixasOportunidadesPorDiaMes']['disponibilidade_total'] ?? 1)) * 100 : 0) }}</strong>
                     </div>
                 </div>
             </section>
@@ -246,7 +362,7 @@
                         <strong>{{ $fmt($visaoDemanda['programadas_total'] ?? 0) }}</strong>
                     </div>
                     <div>
-                        <span>Separadas</span>
+                        <span>Separação finalizada</span>
                         <strong>{{ $fmt($visaoDemanda['programadas_separadas'] ?? $visaoDemanda['programadas_executadas'] ?? 0) }}</strong>
                     </div>
                     <div>
@@ -277,106 +393,35 @@
                         <strong>{{ $fmt($visaoDemanda['oportunidades_expedidas'] ?? 0) }}</strong>
                     </div>
                     <div>
-                        <span>Total expedido</span>
+                        <span>Expedição finalizada</span>
                         <strong>{{ $fmt($visaoDemanda['total_expedido'] ?? $resumo['expedidas'] ?? 0) }}</strong>
                     </div>
                     <div>
-                        <span>Aguardando expedição</span>
+                        <span>separadas aguardando expedição</span>
                         <strong>{{ $fmt($resumo['separadas_aguardando_expedicao'] ?? 0) }}</strong>
                     </div>
                 </div>
             </section>
 
-            <section class="panel">
+            <section class="panel span-4">
                 <div class="panel-title">
                     <div>
-                        <h2>Capacidade</h2>
-                        <p>Consumo e folga da operação no período.</p>
+                        <h2>Evolução do período</h2>
+                        <p>DTs criadas x DTs separadas. Este gráfico não representa expedição finalizada.</p>
                     </div>
+                    @if($resumo['variacao_volume'] !== null)
+                        <span class="badge-soft {{ $resumo['variacao_volume'] >= 0 ? 'good' : 'bad' }}">
+                            {{ $resumo['variacao_volume'] >= 0 ? '+' : '' }}{{ $fmtPct($resumo['variacao_volume']) }} vs período anterior
+                        </span>
+                    @else
+                        <span class="badge-soft">Sem base anterior</span>
+                    @endif
                 </div>
-                <div class="capacity-block">
-                    <div class="capacity-value">
-                        <span>Consumida</span>
-                        <strong>{{ $fmtPct($capacidadeOperacional['capacidade']['geral_consumida_percentual'] ?? 0) }}</strong>
-                    </div>
-                    <div class="progress executive-progress" role="progressbar" aria-valuenow="{{ $capacidadeOperacional['capacidade']['geral_consumida_percentual'] ?? 0 }}" aria-valuemin="0" aria-valuemax="100">
-                        <div class="progress-bar" style="width: {{ min(100, max(0, $capacidadeOperacional['capacidade']['geral_consumida_percentual'] ?? 0)) }}%"></div>
-                    </div>
-                    <div class="mini-metrics two-cols">
-                        <div>
-                            <span>Consumida</span>
-                            <strong>{{ $fmt($capacidadeOperacional['capacidade']['geral_consumida_dt'] ?? 0) }}</strong>
-                        </div>
-                        <div>
-                            <span>Restante</span>
-                            <strong>{{ $fmt($capacidadeOperacional['capacidade']['restante_dt'] ?? 0) }}</strong>
-                        </div>
-                    </div>
+                <div class="chart-box">
+                    <canvas id="chartEvolucaoGerencial"></canvas>
                 </div>
             </section>
 
-            <section class="panel">
-                <div class="panel-title">
-                    <div>
-                        <h2>Status separação</h2>
-                        <p>Composição do resultado do picking.</p>
-                    </div>
-                </div>
-                <div class="chart-box small">
-                    <canvas id="chartStatusGerencial"></canvas>
-                </div>
-                <div class="mini-metrics two-cols compact">
-                    <div>
-                        <span>Parcialidade</span>
-                        <strong>{{ $fmtPct($resumo['percentual_parcial']) }}</strong>
-                    </div>
-                    <div>
-                        <span>Tempo médio</span>
-                        <strong>{{ $fmtMin($resumo['tempo_medio_min']) }}</strong>
-                    </div>
-                </div>
-            </section>
-
-            <section class="panel">
-                <div class="panel-title">
-                    <div>
-                        <h2>Top produtividade</h2>
-                        <p>5 maiores separadores por volume.</p>
-                    </div>
-                </div>
-                <div class="ranking-list">
-                    @forelse($topProdutividade as $idx => $linha)
-                        <div class="ranking-item">
-                            <span>{{ $idx + 1 }}</span>
-                            <div>
-                                <strong>{{ $linha['separador'] }}</strong>
-                                <small>{{ $fmt($linha['dts']) }} DTs | {{ $fmtPct($linha['participacao']) }} participação</small>
-                            </div>
-                            <b>{{ $fmt($linha['pecas']) }}</b>
-                        </div>
-                    @empty
-                        <div class="empty-state">Sem apontamentos finalizados para os filtros selecionados.</div>
-                    @endforelse
-                </div>
-            </section>
-
-            <section class="panel span-2">
-                <div class="panel-title">
-                    <div>
-                        <h2>Pontos de atenção para decisão</h2>
-                        <p>Leitura objetiva dos desvios que precisam de acompanhamento.</p>
-                    </div>
-                    <span class="badge-soft">Maior tempo: {{ $fmtMin($resumo['tempo_max_min']) }}</span>
-                </div>
-                <div class="attention-list">
-                    @foreach($pontosAtencao->take(4) as $item)
-                        <div class="attention-item">
-                            <i class="mdi mdi-alert-circle-outline"></i>
-                            <span>{{ $item }}</span>
-                        </div>
-                    @endforeach
-                </div>
-            </section>
         </main>
 
         <textarea id="whatsappResumo" class="visually-hidden" readonly>{{ $mensagemWhatsapp }}</textarea>
@@ -458,6 +503,91 @@
         max-width: 760px;
     }
 
+    .section-heading {
+        align-items: center;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .section-heading h2 {
+        color: #fff;
+        font-size: 18px;
+        margin: 0;
+    }
+
+    .section-heading p {
+        color: var(--muted);
+        margin: 4px 0 0;
+    }
+
+    .previsibilidade-block {
+        background: rgba(15, 23, 42, 0.62);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin-bottom: 14px;
+        padding: 16px;
+    }
+
+    .previsibilidade-grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .previs-card {
+        align-items: center;
+        background: rgba(15, 23, 42, 0.86);
+        border: 1px solid rgba(56, 189, 248, 0.22);
+        border-radius: 8px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: minmax(0, 1fr) auto;
+        min-height: 96px;
+        padding: 13px;
+    }
+
+    .previs-card.ok {
+        border-color: rgba(34, 197, 94, 0.36);
+    }
+
+    .previs-card.warning {
+        border-color: rgba(245, 158, 11, 0.46);
+    }
+
+    .previs-card.danger {
+        border-color: rgba(239, 68, 68, 0.46);
+    }
+
+    .previs-card span,
+    .previs-card small {
+        color: var(--muted);
+        display: block;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .previs-card span {
+        font-size: 11px;
+    }
+
+    .previs-card strong {
+        color: #fff;
+        display: block;
+        font-size: 30px;
+        line-height: 1;
+        margin: 10px 0 6px;
+    }
+
+    .previs-card b {
+        background: rgba(56, 189, 248, 0.12);
+        border-radius: 999px;
+        color: #bae6fd;
+        font-size: 12px;
+        padding: 6px 8px;
+    }
+
     .header-side {
         align-items: flex-end;
         display: flex;
@@ -531,6 +661,67 @@
         margin-bottom: 14px;
     }
 
+    .compact-kpis {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .gauge-overview {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        margin-bottom: 14px;
+    }
+
+    .gauge-card {
+        background: var(--panel-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: 0 14px 34px rgba(2, 6, 23, 0.2);
+        min-height: 190px;
+        padding: 14px;
+    }
+
+    .gauge-head {
+        align-items: flex-start;
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+        min-height: 36px;
+    }
+
+    .gauge-head span,
+    .gauge-card small {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 900;
+        text-transform: uppercase;
+    }
+
+    .gauge-head b {
+        color: #fff;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    .gauge-wrap {
+        height: 112px;
+        margin-top: 6px;
+        position: relative;
+    }
+
+    .donut-wrap {
+        height: 128px;
+        margin-top: 2px;
+        position: relative;
+    }
+
+    .gauge-card small {
+        display: block;
+        line-height: 1.25;
+        margin-top: 6px;
+        text-transform: none;
+    }
+
     .kpi-card,
     .panel {
         background: var(--panel-bg);
@@ -550,6 +741,18 @@
 
     .kpi-card.expedition {
         border-color: rgba(34, 197, 94, 0.48);
+    }
+
+    .kpi-card.success {
+        border-color: rgba(34, 197, 94, 0.58);
+    }
+
+    .kpi-card.warning {
+        border-color: rgba(245, 158, 11, 0.58);
+    }
+
+    .kpi-card.danger {
+        border-color: rgba(239, 68, 68, 0.58);
     }
 
     .kpi-card.risk.danger {
@@ -600,6 +803,10 @@
         grid-column: span 2;
     }
 
+    .span-4 {
+        grid-column: span 4;
+    }
+
     .panel-title {
         align-items: start;
         grid-template-columns: minmax(0, 1fr) auto;
@@ -634,9 +841,24 @@
         color: #fca5a5;
     }
 
+    .badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+    }
+
     .chart-box {
         height: 224px;
         position: relative;
+    }
+
+    .chart-box-projection {
+        height: 285px;
+    }
+
+    .chart-box-hero {
+        height: 330px;
     }
 
     .chart-box.small {
@@ -800,6 +1022,18 @@
         .executive-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
+
+        .previsibilidade-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .gauge-overview {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .span-4 {
+            grid-column: span 2;
+        }
     }
 
     @media (max-width: 992px) {
@@ -818,11 +1052,14 @@
 
         .kpi-row,
         .executive-grid,
+        .previsibilidade-grid,
+        .gauge-overview,
         .attention-list {
             grid-template-columns: 1fr;
         }
 
-        .span-2 {
+        .span-2,
+        .span-4 {
             grid-column: span 1;
         }
     }
@@ -856,11 +1093,17 @@
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script nonce="{{ $cspNonce ?? '' }}">
 document.addEventListener('DOMContentLoaded', function () {
     if (typeof Chart === 'undefined') {
         return;
+    }
+
+    if (typeof ChartDataLabels !== 'undefined') {
+        Chart.register(ChartDataLabels);
+        Chart.defaults.plugins.datalabels.display = false;
     }
 
     const dados = @json($dadosGraficos);
@@ -873,9 +1116,92 @@ document.addEventListener('DOMContentLoaded', function () {
     const btnCompartilharOnepage = document.getElementById('btnCompartilharOnepage');
     const copyFeedback = document.getElementById('copyFeedback');
     const formatCaixas = (value) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(value || 0);
+    const numeroValido = (value) => value !== null && value !== undefined && Number(value) > 0;
+    const percent = (value, total) => Number(total || 0) > 0 ? (Number(value || 0) / Number(total || 0)) * 100 : 0;
+    const percentColor = (value) => value >= 90 ? '#22c55e' : (value >= 75 ? '#f59e0b' : '#ef4444');
+    const ultimoIndiceComValor = (dataset) => {
+        const data = dataset?.data || [];
+        for (let index = data.length - 1; index >= 0; index--) {
+            if (numeroValido(data[index])) {
+                return index;
+            }
+        }
+
+        return -1;
+    };
 
     Chart.defaults.color = textColor;
     Chart.defaults.font.family = 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+    const centerTextPlugin = {
+        id: 'centerText',
+        afterDraw(chart, args, options) {
+            const text = options?.text;
+            if (!text) {
+                return;
+            }
+
+            const { ctx, chartArea } = chart;
+            const centerX = (chartArea.left + chartArea.right) / 2;
+            const centerY = options.type === 'gauge'
+                ? chartArea.bottom - 10
+                : (chartArea.top + chartArea.bottom) / 2;
+
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = options.color || '#fff';
+            ctx.font = '900 24px Inter, system-ui, sans-serif';
+            ctx.fillText(text, centerX, centerY);
+
+            if (options.subtext) {
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '800 11px Inter, system-ui, sans-serif';
+                ctx.fillText(options.subtext, centerX, centerY + 22);
+            }
+
+            ctx.restore();
+        }
+    };
+
+    const gaugeNeedlePlugin = {
+        id: 'gaugeNeedle',
+        afterDatasetDraw(chart, args, options) {
+            if (!options?.display || args.index !== 0) {
+                return;
+            }
+
+            const meta = chart.getDatasetMeta(0);
+            const arc = meta.data?.[0];
+            if (!arc) {
+                return;
+            }
+
+            const value = Math.min(120, Math.max(0, Number(options.value || 0)));
+            const angle = Math.PI + (value / 120) * Math.PI;
+            const cx = arc.x;
+            const cy = arc.y;
+            const radius = arc.outerRadius * 0.82;
+            const needleX = cx + Math.cos(angle) * radius;
+            const needleY = cy + Math.sin(angle) * radius;
+            const { ctx } = chart;
+
+            ctx.save();
+            ctx.strokeStyle = '#f8fafc';
+            ctx.fillStyle = '#f8fafc';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(needleX, needleY);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    };
+
+    Chart.register(centerTextPlugin, gaugeNeedlePlugin);
 
     if (btnAbrirWhatsapp) {
         btnAbrirWhatsapp.href = 'https://wa.me/?text=' + encodeURIComponent(mensagemWhatsapp);
@@ -915,6 +1241,108 @@ document.addEventListener('DOMContentLoaded', function () {
     if (btnCopiarWhatsapp) {
         btnCopiarWhatsapp.addEventListener('click', copyWhatsappText);
     }
+
+    function renderGauge(id, value, total, unitLabel) {
+        const canvas = document.getElementById(id);
+        if (!canvas) {
+            return;
+        }
+
+        const pct = percent(value, total);
+
+        new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: ['Crítico', 'Atenção', 'Dentro do projeto'],
+                datasets: [{
+                    data: [75, 15, 30],
+                    backgroundColor: ['#ef4444', '#f59e0b', '#22c55e'],
+                    borderColor: ['rgba(255,255,255,.08)', 'rgba(255,255,255,.08)', 'rgba(255,255,255,.08)'],
+                    borderWidth: 1,
+                    cutout: '72%'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                rotation: -90,
+                circumference: 180,
+                plugins: {
+                    legend: { display: false },
+                    datalabels: { display: false },
+                    gaugeNeedle: {
+                        display: true,
+                        value: pct
+                    },
+                    centerText: {
+                        type: 'gauge',
+                        text: `${pct.toFixed(1).replace('.', ',')}%`,
+                        subtext: `${formatCaixas(value)} / ${formatCaixas(total)} ${unitLabel}`,
+                        color: percentColor(pct)
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.label}: ${formatCaixas(ctx.raw)}%`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function cardValor(titulo) {
+        const card = (dados.previsibilidade?.cards || []).find((item) => item.titulo === titulo);
+        return Number(card?.valor || 0);
+    }
+
+    function renderComposicaoDia() {
+        const canvas = document.getElementById('donutComposicaoDia');
+        if (!canvas) {
+            return;
+        }
+
+        const totalDia = cardValor('Demanda dia');
+        const realizado = Number(dados.metasDiarias?.expedicao?.realizado ?? cardValor('Carregamento') ?? cardValor('Realizado') ?? 0);
+        const naPlanta = cardValor('Na planta');
+        const faltaChegar = Math.max(0, totalDia - realizado - naPlanta);
+
+        new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: ['Realizado', 'Na planta', 'Falta chegar'],
+                datasets: [{
+                    data: [realizado, naPlanta, faltaChegar],
+                    backgroundColor: ['#22c55e', '#38bdf8', '#f59e0b'],
+                    borderColor: '#111827',
+                    borderWidth: 3,
+                    cutout: '64%'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 10 } },
+                    datalabels: { display: false },
+                    centerText: {
+                        text: formatCaixas(realizado),
+                        subtext: 'realizado'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.label}: ${formatCaixas(ctx.raw)}`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    renderGauge('gaugeExpedicaoRealizada', dados.metasDiarias?.expedicao?.realizado, dados.metasDiarias?.expedicao?.disponibilidade, 'veículos');
+    renderGauge('gaugeSeparacaoRealizada', dados.metasDiarias?.separacao?.realizado, dados.metasDiarias?.separacao?.disponibilidade, 'caixas');
+    renderGauge('gaugeExpedicaoProjetada', dados.metasDiarias?.expedicao?.projecao_fechamento, dados.metasDiarias?.expedicao?.disponibilidade, 'veículos');
+    renderGauge('gaugeSeparacaoProjetada', dados.metasDiarias?.separacao?.projecao_fechamento, dados.metasDiarias?.separacao?.disponibilidade, 'caixas');
+    renderComposicaoDia();
 
     function baixarImagem(blob, nomeArquivo) {
         const link = document.createElement('a');
@@ -1030,6 +1458,99 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    const chartProjecao12h = document.getElementById('chartProjecao12h');
+    if (chartProjecao12h && dados.projecaoProdutividade12h) {
+        const projecao = dados.projecaoProdutividade12h;
+        const isJanelaMeta = (item) => {
+            const hora = Number(String(item?.hora || '00:00').slice(0, 2));
+            return hora >= 12 && hora <= 23;
+        };
+        const curvaIdealMeta = (projecao.curvaIdeal || []).filter(isJanelaMeta);
+        const apontamentos = projecao.apontamentos || [];
+        const apontamentosMeta = apontamentos.filter(isJanelaMeta);
+        const projecaoCorrigidaMeta = (projecao.projecaoCorrigida || []).filter(isJanelaMeta);
+        const pontosAntesDas12 = apontamentos.filter((item) => {
+            const hora = Number(String(item?.hora || '00:00').slice(0, 2));
+            return hora < 12 && item?.acumulado !== null;
+        });
+        const baseAntesDas12 = pontosAntesDas12.length
+            ? Number(pontosAntesDas12[pontosAntesDas12.length - 1].acumulado || 0)
+            : 0;
+
+        new Chart(chartProjecao12h, {
+            type: 'line',
+            data: {
+                labels: curvaIdealMeta.map((item) => item.hora),
+                datasets: [
+                    {
+                        label: 'Caixas separadas',
+                        data: apontamentosMeta.map((item) => Math.max(0, Number(item.acumulado || 0) - baseAntesDas12)),
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.14)',
+                        borderWidth: 4,
+                        pointRadius: 4,
+                        tension: 0.25,
+                        fill: false
+                    },
+                    {
+                        label: 'Curva ideal',
+                        data: curvaIdealMeta.map((item) => item.valor),
+                        borderColor: '#22c55e',
+                        borderDash: [6, 4],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.35,
+                        fill: false
+                    },
+                    {
+                        label: 'Projeção corrigida',
+                        data: projecaoCorrigidaMeta.map((item) => item.valor),
+                        borderColor: '#f59e0b',
+                        borderDash: [10, 5],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.35,
+                        fill: false
+                    },
+                    {
+                        label: `Meta ${formatCaixas(projecao.meta || 11000)} caixas`,
+                        data: curvaIdealMeta.map(() => projecao.meta || 11000),
+                        borderColor: '#ef4444',
+                        borderDash: [2, 2],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                    datalabels: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.dataset.label}: ${formatCaixas(ctx.raw)} caixas`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: gridColor },
+                        title: { display: true, text: 'Hora' }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: gridColor },
+                        ticks: { callback: (value) => formatCaixas(value) },
+                        title: { display: true, text: 'Caixas' }
+                    }
+                }
+            }
+        });
+    }
+
     const chartCaixasHora = document.getElementById('chartCaixasHora');
     if (chartCaixasHora && dados.caixasPorHora) {
         new Chart(chartCaixasHora, {
@@ -1081,30 +1602,60 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    const chartCaixasDiaMes = document.getElementById('chartCaixasDiaMes');
-    if (chartCaixasDiaMes && dados.caixasPorDiaMes) {
-        new Chart(chartCaixasDiaMes, {
+    function renderMetaDiariaChart(id, setor) {
+        const canvas = document.getElementById(id);
+        if (!canvas || !setor?.series) {
+            return;
+        }
+
+        new Chart(canvas, {
             type: 'bar',
             data: {
-                labels: dados.caixasPorDiaMes.labels,
+                labels: setor.series.labels,
                 datasets: [
                     {
                         type: 'bar',
-                        label: 'Caixas por dia',
-                        data: dados.caixasPorDiaMes.values,
-                        backgroundColor: '#2563eb',
-                        borderRadius: 5,
-                        maxBarThickness: 24
+                        label: 'Disponível',
+                        data: setor.series.ideal,
+                        backgroundColor: 'rgba(34, 197, 94, 0.32)',
+                        borderColor: 'rgba(34, 197, 94, 0.74)',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        maxBarThickness: 20
+                    },
+                    {
+                        type: 'bar',
+                        label: 'Realizado',
+                        data: setor.series.real,
+                        backgroundColor: 'rgba(37, 99, 235, 0.78)',
+                        borderColor: '#60a5fa',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        maxBarThickness: 20
                     },
                     {
                         type: 'line',
-                        label: `Meta ${formatCaixas(dados.caixasPorDiaMes.meta)}/dia`,
-                        data: dados.caixasPorDiaMes.labels.map(() => dados.caixasPorDiaMes.meta),
+                        label: 'Projeção',
+                        data: setor.series.projecao,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.14)',
+                        borderWidth: 3,
+                        pointRadius: 3,
+                        pointHoverRadius: 6,
+                        tension: 0.32,
+                        fill: false
+                    },
+                    {
+                        type: 'line',
+                        label: 'Meta',
+                        data: setor.series.meta,
                         borderColor: '#ef4444',
-                        borderDash: [6, 4],
+                        backgroundColor: 'rgba(239, 68, 68, 0.10)',
                         borderWidth: 2,
+                        borderDash: [6, 4],
                         pointRadius: 0,
-                        tension: 0
+                        tension: 0,
+                        fill: false
                     }
                 ]
             },
@@ -1112,10 +1663,147 @@ document.addEventListener('DOMContentLoaded', function () {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'bottom' },
+                    legend: { position: 'top' },
+                    datalabels: {
+                        display: (ctx) => {
+                            if (!numeroValido(ctx.raw)) {
+                                return false;
+                            }
+
+                            if (ctx.dataset.type === 'line') {
+                                return ctx.dataIndex === ultimoIndiceComValor(ctx.dataset);
+                            }
+
+                            return ctx.dataIndex % 3 === 0 || ctx.dataIndex === ultimoIndiceComValor(ctx.dataset);
+                        },
+                        align: (ctx) => ctx.dataset.type === 'line' ? 'top' : 'end',
+                        anchor: (ctx) => ctx.dataset.type === 'line' ? 'end' : 'end',
+                        backgroundColor: (ctx) => ctx.dataset.type === 'line'
+                            ? 'rgba(245, 158, 11, 0.18)'
+                            : 'rgba(15, 23, 42, 0.82)',
+                        borderColor: (ctx) => ctx.dataset.type === 'line'
+                            ? 'rgba(245, 158, 11, 0.52)'
+                            : 'rgba(148, 163, 184, 0.30)',
+                        borderRadius: 4,
+                        borderWidth: 1,
+                        color: '#f8fafc',
+                        clamp: true,
+                        clip: false,
+                        font: {
+                            size: 10,
+                            weight: '800'
+                        },
+                        formatter: (value) => formatCaixas(value),
+                        offset: 4,
+                        padding: {
+                            top: 3,
+                            right: 5,
+                            bottom: 3,
+                            left: 5
+                        }
+                    },
                     tooltip: {
                         callbacks: {
-                            label: (ctx) => `${ctx.dataset.label}: ${formatCaixas(ctx.raw)} caixas`
+                            label: (ctx) => `${ctx.dataset.label}: ${formatCaixas(ctx.raw)} ${setor.unidade}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: gridColor },
+                        title: { display: true, text: 'Hora' }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: gridColor },
+                        ticks: { callback: (value) => formatCaixas(value) },
+                        title: { display: true, text: setor.unidade.charAt(0).toUpperCase() + setor.unidade.slice(1) }
+                    }
+                }
+            }
+        });
+    }
+
+    renderMetaDiariaChart('chartMetaSeparacaoDiaria', dados.metasDiarias?.separacao);
+    renderMetaDiariaChart('chartMetaExpedicaoDiaria', dados.metasDiarias?.expedicao);
+
+    function deveMostrarRotuloMensal(ctx) {
+        if (!numeroValido(ctx.raw)) {
+            return false;
+        }
+
+        if (ctx.dataset.type === 'line') {
+            return ctx.dataIndex === ultimoIndiceComValor(ctx.dataset);
+        }
+
+        const label = String(ctx.dataset.label || '').toLowerCase();
+        const datasets = ctx.chart?.data?.datasets || [];
+        const realizadoDataset = datasets.find((dataset) => String(dataset.label || '').toLowerCase().includes('realiz'));
+        const disponibilidadeDataset = datasets.find((dataset) => {
+            const nome = String(dataset.label || '').toLowerCase();
+            return nome.includes('dispon') || nome.includes('program');
+        });
+        const realizado = Number(realizadoDataset?.data?.[ctx.dataIndex] || 0);
+        const disponibilidade = Number(disponibilidadeDataset?.data?.[ctx.dataIndex] || 0);
+
+        if ((label.includes('dispon') || label.includes('program')) && realizado > 0 && Math.abs(realizado - disponibilidade) <= 0.1) {
+            return false;
+        }
+
+        if (label.includes('realiz')) {
+            return true;
+        }
+
+        const pontosComValor = (ctx.dataset.data || []).filter(numeroValido).length;
+        return pontosComValor <= 10 || ctx.dataIndex === ultimoIndiceComValor(ctx.dataset);
+    }
+
+    function renderGroupedBarChart(id, labels, datasets, yTitle, tooltipSuffix) {
+        const canvas = document.getElementById(id);
+        if (!canvas) {
+            return;
+        }
+
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: datasets.map((dataset) => ({
+                    type: dataset.type || 'bar',
+                    borderRadius: 5,
+                    maxBarThickness: dataset.type === 'line' ? undefined : 18,
+                    ...dataset
+                }))
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    datalabels: {
+                        display: deveMostrarRotuloMensal,
+                        align: (ctx) => {
+                            const label = String(ctx.dataset.label || '').toLowerCase();
+                            if (ctx.dataset.type === 'line') {
+                                return 'top';
+                            }
+
+                            return label.includes('realiz') ? 'end' : 'center';
+                        },
+                        anchor: (ctx) => ctx.dataset.type === 'line' ? 'end' : 'end',
+                        backgroundColor: (ctx) => ctx.dataset.type === 'line' ? 'rgba(127, 29, 29, 0.72)' : 'rgba(15, 23, 42, 0.72)',
+                        borderRadius: 4,
+                        color: (ctx) => ctx.dataset.type === 'line' ? '#fecaca' : '#dbeafe',
+                        clamp: true,
+                        clip: false,
+                        font: { size: 9, weight: '800' },
+                        offset: (ctx) => ctx.dataset.type === 'line' ? 6 : 2,
+                        padding: { top: 2, right: 4, bottom: 2, left: 4 },
+                        formatter: (value) => formatCaixas(value)
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.dataset.label}: ${formatCaixas(ctx.raw)} ${tooltipSuffix}`
                         }
                     }
                 },
@@ -1125,85 +1813,106 @@ document.addEventListener('DOMContentLoaded', function () {
                         beginAtZero: true,
                         grid: { color: gridColor },
                         ticks: { callback: (value) => formatCaixas(value) },
-                        title: { display: true, text: 'Caixas' }
+                        title: { display: true, text: yTitle }
                     }
                 }
             }
         });
     }
 
-    const chartCaixasOportunidadesDiaMes = document.getElementById('chartCaixasOportunidadesDiaMes');
-    if (chartCaixasOportunidadesDiaMes && dados.caixasOportunidadesPorDiaMes) {
-        new Chart(chartCaixasOportunidadesDiaMes, {
-            type: 'bar',
-            data: {
-                labels: dados.caixasOportunidadesPorDiaMes.labels,
-                datasets: [
-                    {
-                        type: 'bar',
-                        label: 'Caixas de oportunidades',
-                        data: dados.caixasOportunidadesPorDiaMes.values,
-                        backgroundColor: '#2563eb',
-                        borderRadius: 5,
-                        maxBarThickness: 24
-                    },
-                    {
-                        type: 'line',
-                        label: `Meta ${formatCaixas(dados.caixasOportunidadesPorDiaMes.meta)}/dia`,
-                        data: dados.caixasOportunidadesPorDiaMes.labels.map(() => dados.caixasOportunidadesPorDiaMes.meta),
-                        borderColor: '#ef4444',
-                        borderDash: [6, 4],
-                        borderWidth: 2,
-                        pointRadius: 0,
-                        tension: 0
-                    }
-                ]
+    if (dados.caixasPorDiaMes) {
+        renderGroupedBarChart('chartCaixasDiaMes', dados.caixasPorDiaMes.labels, [
+            {
+                type: 'line',
+                label: 'Meta',
+                data: dados.caixasPorDiaMes.metaValues || dados.caixasPorDiaMes.labels.map(() => dados.caixasPorDiaMes.meta),
+                backgroundColor: 'rgba(239, 68, 68, 0.10)',
+                borderColor: 'rgba(239, 68, 68, 0.95)',
+                borderWidth: 2,
+                borderDash: [6, 4],
+                pointRadius: 0,
+                tension: 0,
+                fill: false
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'bottom' },
-                    tooltip: {
-                        callbacks: {
-                            label: (ctx) => `${ctx.dataset.label}: ${formatCaixas(ctx.raw)} caixas`
-                        }
-                    }
-                },
-                scales: {
-                    x: { grid: { display: false }, title: { display: true, text: 'Dia' } },
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: gridColor },
-                        ticks: { callback: (value) => formatCaixas(value) },
-                        title: { display: true, text: 'Caixas' }
-                    }
-                }
+            {
+                label: 'Disponível',
+                data: dados.caixasPorDiaMes.disponibilidadeValues || [],
+                backgroundColor: 'rgba(34, 197, 94, 0.42)',
+                borderColor: 'rgba(34, 197, 94, 0.82)',
+                borderWidth: 1
+            },
+            {
+                label: 'Realizado',
+                data: dados.caixasPorDiaMes.values,
+                backgroundColor: 'rgba(37, 99, 235, 0.82)',
+                borderColor: '#60a5fa',
+                borderWidth: 1
             }
-        });
+        ], 'Caixas', 'caixas');
     }
 
-    const chartStatus = document.getElementById('chartStatusGerencial');
-    if (chartStatus) {
-        new Chart(chartStatus, {
-            type: 'doughnut',
-            data: {
-                labels: dados.status.labels,
-                datasets: [{
-                    data: dados.status.values,
-                    backgroundColor: ['#22c55e', '#f59e0b', '#38bdf8', '#ef4444'],
-                    borderColor: '#111827',
-                    borderWidth: 3
-                }]
+    if (dados.veiculosPorDiaMes) {
+        renderGroupedBarChart('chartVeiculosDiaMes', dados.veiculosPorDiaMes.labels, [
+            {
+                type: 'line',
+                label: 'Meta',
+                data: dados.veiculosPorDiaMes.metaValues || dados.veiculosPorDiaMes.labels.map(() => dados.veiculosPorDiaMes.meta),
+                backgroundColor: 'rgba(239, 68, 68, 0.10)',
+                borderColor: 'rgba(239, 68, 68, 0.95)',
+                borderWidth: 2,
+                borderDash: [6, 4],
+                pointRadius: 0,
+                tension: 0,
+                fill: false
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '68%',
-                plugins: { legend: { position: 'bottom' } }
+            {
+                label: 'Programados',
+                data: dados.veiculosPorDiaMes.programados,
+                backgroundColor: 'rgba(34, 197, 94, 0.42)',
+                borderColor: 'rgba(34, 197, 94, 0.82)',
+                borderWidth: 1
+            },
+            {
+                label: 'Realizados',
+                data: dados.veiculosPorDiaMes.realizados,
+                backgroundColor: 'rgba(37, 99, 235, 0.82)',
+                borderColor: '#60a5fa',
+                borderWidth: 1
             }
-        });
+        ], 'Veículos', 'veículos');
     }
+
+    if (dados.caixasOportunidadesPorDiaMes) {
+        renderGroupedBarChart('chartCaixasOportunidadesDiaMes', dados.caixasOportunidadesPorDiaMes.labels, [
+            {
+                type: 'line',
+                label: 'Meta',
+                data: dados.caixasOportunidadesPorDiaMes.metaValues || dados.caixasOportunidadesPorDiaMes.labels.map(() => dados.caixasOportunidadesPorDiaMes.meta),
+                backgroundColor: 'rgba(239, 68, 68, 0.10)',
+                borderColor: 'rgba(239, 68, 68, 0.95)',
+                borderWidth: 2,
+                borderDash: [6, 4],
+                pointRadius: 0,
+                tension: 0,
+                fill: false
+            },
+            {
+                label: 'Disponível',
+                data: dados.caixasOportunidadesPorDiaMes.disponibilidadeValues || [],
+                backgroundColor: 'rgba(34, 197, 94, 0.42)',
+                borderColor: 'rgba(34, 197, 94, 0.82)',
+                borderWidth: 1
+            },
+            {
+                label: 'Realizado',
+                data: dados.caixasOportunidadesPorDiaMes.values,
+                backgroundColor: 'rgba(37, 99, 235, 0.82)',
+                borderColor: '#60a5fa',
+                borderWidth: 1
+            }
+        ], 'Caixas', 'caixas');
+    }
+
 });
 </script>
 @endpush

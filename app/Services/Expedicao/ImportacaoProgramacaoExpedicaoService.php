@@ -193,8 +193,10 @@ class ImportacaoProgramacaoExpedicaoService
                 $this->valor($dados, ['data agendamento', 'agenda entrega data']),
                 $this->valor($dados, ['hora agendamento', 'agenda entrega hora'])
             ),
+            'data_expedicao_em' => $this->dataHora($this->valor($dados, ['data expedicao', 'data expedição'])),
             'cidade_destino' => $this->valor($dados, ['cidade de destino', 'cidade destino', 'destino', 'cidade']),
             'uf_destino' => $this->uf($this->valor($dados, ['uf de destino', 'uf destino', 'estado'])),
+            'codigo_cliente' => $this->codigoClienteProgramacao($dados),
             'cliente' => $this->valor($dados, ['desc cliente', 'cliente', 'nome']),
             'transportadora' => $this->valor($dados, ['transportadora']),
             'tipo_veiculo' => $this->valor($dados, ['tipo do veiculo', 'desc tp veiculo', 'tipo veiculo']),
@@ -248,28 +250,14 @@ class ImportacaoProgramacaoExpedicaoService
             'hora_agendada' => $this->hora($horaAgendamento),
             'entrada' => $this->hora($horaEntrada),
             'saida' => $this->hora($horaSaida),
-            'conferencia_finalizada_em' => $this->combinarDataHora(
+            'conferencia_finalizada_em' => $this->combinarDataHoraOperacional(
                 $this->valor($dados, ['data validacao', 'data validação', 'data valida']),
                 $this->valor($dados, ['hora validacao', 'hora validação', 'hora valida'])
             ),
             'separacao_iniciada_em' => $this->dataHora($this->valor($dados, ['separacao', 'separação']), $dataAgendamento),
             'carregamento_iniciado_em' => $this->dataHora($this->valor($dados, ['carregamento']), $dataAgendamento),
-            'carregamento_finalizado_em' => $this->combinarDataHora($dataSaida, $horaSaida),
+            'carregamento_finalizado_em' => $this->combinarDataHoraOperacional($dataSaida, $horaSaida),
         ];
-
-        if ($this->vazio($camposDemanda['conferencia_finalizada_em'])) {
-            $camposDemanda['conferencia_finalizada_em'] = $this->dataHora(
-                $this->valor($dados, ['validacao', 'validação', 'valida']),
-                $dataAgendamento
-            );
-        }
-
-        if ($this->vazio($camposDemanda['carregamento_finalizado_em'])) {
-            $camposDemanda['carregamento_finalizado_em'] = $this->dataHora(
-                $this->valor($dados, ['saida', 'saída']),
-                $dataAgendamento
-            );
-        }
 
         $this->preencherSemNulos($demanda, $camposDemanda);
 
@@ -423,6 +411,17 @@ class ImportacaoProgramacaoExpedicaoService
         return $this->dataOperacionalValida($dataCarbon);
     }
 
+    private function combinarDataHoraOperacional(mixed $data, mixed $hora): ?Carbon
+    {
+        $horaTexto = $this->hora($hora);
+
+        if ($this->vazio($data) || $horaTexto === null || $horaTexto === '00:00:00') {
+            return null;
+        }
+
+        return $this->combinarDataHora($data, $horaTexto);
+    }
+
     private function dataOperacionalValida(?Carbon $data): ?Carbon
     {
         if (! $data || $data->lt(self::DATA_OPERACIONAL_MINIMA)) {
@@ -506,6 +505,51 @@ class ImportacaoProgramacaoExpedicaoService
         $uf = strtoupper(trim((string) $valor));
 
         return strlen($uf) === 2 ? $uf : null;
+    }
+
+    private function codigoCliente(mixed $valor): ?string
+    {
+        if ($this->vazio($valor)) {
+            return null;
+        }
+
+        if (is_float($valor) || is_int($valor)) {
+            return (string) (int) $valor;
+        }
+
+        $codigo = trim((string) $valor);
+
+        return preg_match('/^\d+(\.0+)?$/', $codigo) === 1
+            ? (string) (int) $codigo
+            : $codigo;
+    }
+
+    private function codigoClienteProgramacao(array $dados): ?string
+    {
+        $codigo = $this->codigoCliente($this->valor($dados, [
+            'codigo cliente',
+            'código cliente',
+            'cod cliente',
+            'cód cliente',
+            'cliente codigo',
+            'cliente código',
+            'id cliente',
+            'cliente id',
+            'cod cli',
+            'cód cli',
+        ]));
+
+        if ($codigo !== null) {
+            return $codigo;
+        }
+
+        $cliente = $this->valor($dados, ['cliente']);
+
+        if ($this->valor($dados, ['desc cliente', 'nome']) !== null || is_numeric($cliente)) {
+            return $this->codigoCliente($cliente);
+        }
+
+        return null;
     }
 
     private function vazio(mixed $valor): bool

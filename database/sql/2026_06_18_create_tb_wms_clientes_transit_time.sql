@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `_tb_wms_clientes_transit_time` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `codigo_cliente` VARCHAR(50) NOT NULL,
+  `nome_cliente` VARCHAR(150) NULL,
+  `zona_partida` VARCHAR(50) NULL,
+  `regiao` VARCHAR(100) NULL,
+  `uf` VARCHAR(2) NULL,
+  `cidade` VARCHAR(120) NULL,
+  `zona_transporte` VARCHAR(50) NULL,
+  `ciclo_inte` INT NULL,
+  `transit_time_fechada_dias` INT NOT NULL,
+  `transit_time_fracionada_dias` INT NOT NULL,
+  `ativo` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NULL DEFAULT NULL,
+  `updated_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `_tb_wms_clientes_transit_time_codigo_cliente_unique` (`codigo_cliente`),
+  KEY `_tb_wms_clientes_transit_time_ativo_uf_index` (`ativo`, `uf`),
+  KEY `_tb_wms_clientes_transit_time_zona_partida_index` (`zona_partida`),
+  KEY `_tb_wms_clientes_transit_time_zona_transporte_index` (`zona_transporte`),
+  KEY `_tb_wms_clientes_transit_time_regiao_cidade_index` (`regiao`, `cidade`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

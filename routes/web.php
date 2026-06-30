@@ -10,9 +10,11 @@ use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\KitProgramarController;
 use App\Http\Controllers\Expedicao\ApontamentoOperacionalExpedicaoController;
 use App\Http\Controllers\Expedicao\ImportacaoProgramacaoExpedicaoController;
+use App\Http\Controllers\Expedicao\ImportacaoVeiculosPresentesController;
 use App\Http\Controllers\Expedicao\PrevisibilidadeExpedicaoController;
 use App\Http\Controllers\Expedicao\SaidaVeiculoExpedicaoController;
 use App\Http\Controllers\Expedicao\TimelineDtExpedicaoController;
+use App\Http\Controllers\ClienteTransitTimeController;
 
 
 use App\Http\Controllers\{
@@ -66,6 +68,10 @@ Route::middleware(['auth'])->prefix('expedicao')->name('expedicao.')->group(func
         ->name('importacao-programacao.index');
     Route::post('/importacao-programacao', [ImportacaoProgramacaoExpedicaoController::class, 'store'])
         ->name('importacao-programacao.store');
+    Route::get('/importacao-veiculos-presentes', [ImportacaoVeiculosPresentesController::class, 'index'])
+        ->name('importacao-veiculos-presentes.index');
+    Route::post('/importacao-veiculos-presentes', [ImportacaoVeiculosPresentesController::class, 'store'])
+        ->name('importacao-veiculos-presentes.store');
     Route::get('/apontamentos-operacionais', [ApontamentoOperacionalExpedicaoController::class, 'index'])
         ->middleware('demanda.perfil:operacional')
         ->name('apontamentos-operacionais.index');
@@ -542,6 +548,15 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/dispositivos/{dispositivo}/editar', [DispositivoAutorizadoController::class, 'edit'])->name('dispositivos.edit');
     Route::put('/dispositivos/{dispositivo}', [DispositivoAutorizadoController::class, 'update'])->name('dispositivos.update');
     Route::patch('/dispositivos/{dispositivo}/status', [DispositivoAutorizadoController::class, 'toggle'])->name('dispositivos.toggle');
+
+    Route::get('/parametros-logisticos/transit-time-clientes', [ClienteTransitTimeController::class, 'index'])->name('clientes-transit-time.index');
+    Route::get('/parametros-logisticos/transit-time-clientes/novo', [ClienteTransitTimeController::class, 'create'])->name('clientes-transit-time.create');
+    Route::post('/parametros-logisticos/transit-time-clientes', [ClienteTransitTimeController::class, 'store'])->name('clientes-transit-time.store');
+    Route::get('/parametros-logisticos/transit-time-clientes/importar', [ClienteTransitTimeController::class, 'importForm'])->name('clientes-transit-time.import.form');
+    Route::post('/parametros-logisticos/transit-time-clientes/importar', [ClienteTransitTimeController::class, 'import'])->name('clientes-transit-time.import');
+    Route::get('/parametros-logisticos/transit-time-clientes/{clienteTransitTime}/editar', [ClienteTransitTimeController::class, 'edit'])->name('clientes-transit-time.edit');
+    Route::put('/parametros-logisticos/transit-time-clientes/{clienteTransitTime}', [ClienteTransitTimeController::class, 'update'])->name('clientes-transit-time.update');
+    Route::patch('/parametros-logisticos/transit-time-clientes/{clienteTransitTime}/status', [ClienteTransitTimeController::class, 'toggle'])->name('clientes-transit-time.toggle');
 });
 
 Route::middleware(['auth', 'admin'])

@@ -19,8 +19,10 @@ class ExpedicaoProgramacao extends Model
         'fo',
         'dt_sap',
         'agenda_entrega_em',
+        'data_expedicao_em',
         'cidade_destino',
         'uf_destino',
+        'codigo_cliente',
         'cliente',
         'transportadora',
         'tipo_veiculo',
@@ -34,6 +36,7 @@ class ExpedicaoProgramacao extends Model
 
     protected $casts = [
         'agenda_entrega_em' => 'datetime',
+        'data_expedicao_em' => 'datetime',
         'possui_picking' => 'boolean',
     ];
 

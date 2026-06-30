@@ -4,14 +4,20 @@ namespace App\Services\Expedicao;
 
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use App\Models\ClienteTransitTime;
 use App\Models\Expedicao\ExpedicaoProgramacao;
 use App\Models\Expedicao\ExpedicaoPrevisao;
 use App\Models\Expedicao\ExpedicaoCriterio;
 use App\Models\Expedicao\ExpedicaoRota;
-use App\Services\Expedicao\ConsultaRotaMapsService;
 
 class PrevisaoExpedicaoService
 {
+    private const TEMPOS_OPERACIONAIS_PADRAO = [
+        'SEPARACAO' => 90,
+        'CONFERENCIA' => 60,
+        'CARREGAMENTO' => 120,
+    ];
+
     public function calcular(int $programacaoId): ExpedicaoPrevisao
     {
         $programacao = ExpedicaoProgramacao::findOrFail($programacaoId);
@@ -20,13 +26,11 @@ class PrevisaoExpedicaoService
             ->where('fo', $programacao->fo)
             ->first();
 
-        if (!$demanda) {
-            return $this->registrarErro($programacao, 'Explosão/demanda não encontrada para a FO informada.');
-        }
-
-        $totalSkus = DB::table('_tb_demanda_itens')
-            ->where('demanda_id', $demanda->id)
-            ->count();
+        $totalSkus = $demanda
+            ? DB::table('_tb_demanda_itens')
+                ->where('demanda_id', $demanda->id)
+                ->count()
+            : 0;
 
         $tipoCarga = $programacao->tipo_carga ?? 'PALETIZADA';
         $possuiPicking = (bool) $programacao->possui_picking;
@@ -52,7 +56,7 @@ class PrevisaoExpedicaoService
         }
 
         if ($tempoViagem === null) {
-            return $this->registrarErro($programacao, 'Rota não encontrada para cálculo da saída prevista.', [
+            return $this->registrarErro($programacao, 'Transit time não encontrado para cálculo da saída prevista.', [
                 'score_operacional' => $this->calcularScore($totalSkus, $tipoCarga, $possuiPicking),
                 'tempo_separacao_min' => $tempoSeparacao,
                 'tempo_conferencia_min' => $tempoConferencia,
@@ -91,7 +95,9 @@ class PrevisaoExpedicaoService
             'previsao_saida_caminhao' => $previsaoSaidaCaminhao,
             'risco_operacional' => $risco,
             'status' => 'CALCULADO',
-            'observacoes' => "Previsão calculada com {$totalSkus} SKUs.",
+            'observacoes' => $demanda
+                ? "Previsão calculada com {$totalSkus} SKUs."
+                : 'Previsão planejada sem explosão/demanda vinculada.',
         ]);
 
         $programacao->update([
@@ -120,70 +126,145 @@ class PrevisaoExpedicaoService
             ->orderByDesc('sku_min')
             ->first();
 
-        return $criterio?->tempo_previsto_minutos;
+        return $criterio?->tempo_previsto_minutos
+            ?? self::TEMPOS_OPERACIONAIS_PADRAO[$categoria]
+            ?? null;
     }
 
     private function buscarTempoViagem(ExpedicaoProgramacao $programacao): ?int
     {
-        $cidadeOrigem = $this->normalizarTexto(config('services.expedicao_rotas.origin_city', 'Sao Bernardo do Campo'));
-        $ufOrigem = strtoupper((string) config('services.expedicao_rotas.origin_uf', 'SP'));
-        $cidadeDestino = $this->normalizarTexto($programacao->cidade_destino);
-        $ufDestino = strtoupper((string) $programacao->uf_destino);
+        return $this->tempoViagemTransitTimeCliente($programacao);
+    }
 
-        $rota = ExpedicaoRota::where('ativo', true)
-            ->where('uf_origem', $ufOrigem)
-            ->where('uf_destino', $ufDestino)
-            ->get()
-            ->first(function (ExpedicaoRota $rota) use ($cidadeOrigem, $cidadeDestino) {
-                return $this->normalizarTexto($rota->cidade_origem) === $cidadeOrigem
-                    && $this->normalizarTexto($rota->cidade_destino) === $cidadeDestino;
-            });
+    public function tempoViagemTransitTimeCliente(ExpedicaoProgramacao $programacao): ?int
+    {
+        $tempoDiversos = $this->tempoViagemDiversosPorUf($programacao);
 
-        if ($rota?->tempo_operacional_minutos) {
-            return $rota->tempo_operacional_minutos;
+        if ($tempoDiversos !== null) {
+            return $tempoDiversos;
         }
 
-        if ($rota?->tempo_api_minutos && $this->rotaApiAindaValida($rota)) {
-            $tempoOperacional = $this->tempoViagemOperacionalCaminhao($rota);
+        $transitTime = $this->transitTimeCliente($programacao);
 
-            if ($tempoOperacional !== null) {
-                $rota->forceFill(['tempo_operacional_minutos' => $tempoOperacional])->save();
+        if (! $transitTime) {
+            return null;
+        }
+
+        $dias = $this->usaCargaFechada($programacao)
+            ? $transitTime->transit_time_fechada_dias
+            : $transitTime->transit_time_fracionada_dias;
+
+        return max(0, (int) $dias) * 1440;
+    }
+
+    private function tempoViagemDiversosPorUf(ExpedicaoProgramacao $programacao): ?int
+    {
+        if (! $this->isDestinoDiversos($programacao)) {
+            return null;
+        }
+
+        $ufDestino = strtoupper(trim((string) $programacao->uf_destino));
+
+        if ($ufDestino === '') {
+            return null;
+        }
+
+        $campoDias = $this->usaCargaFechada($programacao)
+            ? 'transit_time_fechada_dias'
+            : 'transit_time_fracionada_dias';
+
+        $maiorDias = ClienteTransitTime::query()
+            ->where('ativo', true)
+            ->where('uf', $ufDestino)
+            ->max($campoDias);
+
+        if ($maiorDias === null) {
+            return null;
+        }
+
+        return max(0, (int) $maiorDias) * 1440;
+    }
+
+    private function transitTimeCliente(ExpedicaoProgramacao $programacao): ?ClienteTransitTime
+    {
+        $codigoCliente = trim((string) $programacao->codigo_cliente);
+
+        if ($codigoCliente !== '') {
+            $transitTime = ClienteTransitTime::query()
+                ->where('ativo', true)
+                ->where('codigo_cliente', $codigoCliente)
+                ->first();
+
+            if ($transitTime) {
+                return $transitTime;
             }
-
-            return $tempoOperacional;
         }
 
-        $dadosApi = app(ConsultaRotaMapsService::class)->consultar(
-            (string) $programacao->cidade_destino,
-            $ufDestino
-        );
+        $cidadeDestino = $this->normalizarTexto($programacao->cidade_destino);
+        $ufDestino = strtoupper(trim((string) $programacao->uf_destino));
 
-        if (! $dadosApi) {
-            return $this->tempoViagemOperacionalCaminhao($rota);
+        if ($cidadeDestino === '' || $ufDestino === '') {
+            return null;
         }
 
-        $rota = $rota ?: new ExpedicaoRota([
-            'cidade_origem' => config('services.expedicao_rotas.origin_city', 'Sao Bernardo do Campo'),
-            'uf_origem' => $ufOrigem,
-            'cidade_destino' => $programacao->cidade_destino,
-            'uf_destino' => $ufDestino,
-            'ativo' => true,
-        ]);
+        $transitTime = ClienteTransitTime::query()
+            ->where('ativo', true)
+            ->where('uf', $ufDestino)
+            ->where('cidade', strtoupper(trim((string) $programacao->cidade_destino)))
+            ->first();
 
-        $rota->fill([
-            'distancia_km' => $dadosApi['distancia_km'],
-            'tempo_api_minutos' => $dadosApi['tempo_api_minutos'],
-            'tempo_operacional_minutos' => self::ajustarTempoViagemCaminhao(
-                $dadosApi['tempo_api_minutos'],
-                $dadosApi['distancia_km']
-            ),
-            'ultima_consulta_em' => now(),
-            'ativo' => true,
-        ]);
+        if ($transitTime) {
+            return $transitTime;
+        }
 
-        $rota->save();
+        return ClienteTransitTime::query()
+            ->where('ativo', true)
+            ->where('uf', $ufDestino)
+            ->where('cidade', 'like', substr($cidadeDestino, 0, 3) . '%')
+            ->get()
+            ->first(fn (ClienteTransitTime $transitTime) => $this->normalizarTexto($transitTime->cidade) === $cidadeDestino);
+    }
 
-        return $this->tempoViagemOperacionalCaminhao($rota);
+    public function possuiTransitTimeBase(ExpedicaoProgramacao $programacao): bool
+    {
+        return $this->transitTimeCliente($programacao) !== null;
+    }
+
+    public function preencherCodigoClientePorTransitTime(ExpedicaoProgramacao $programacao): bool
+    {
+        if (filled($programacao->codigo_cliente)) {
+            return false;
+        }
+
+        $transitTime = $this->transitTimeCliente($programacao);
+
+        if (! $transitTime) {
+            return false;
+        }
+
+        $programacao->offsetUnset('demanda');
+        $programacao->forceFill(['codigo_cliente' => $transitTime->codigo_cliente])->save();
+
+        return true;
+    }
+
+    private function usaCargaFechada(ExpedicaoProgramacao $programacao): bool
+    {
+        $tipoCarga = $this->normalizarTexto($programacao->tipo_carga);
+
+        return str_contains($tipoCarga, 'PALET')
+            || str_contains($tipoCarga, 'FECHAD');
+    }
+
+    private function isDestinoDiversos(ExpedicaoProgramacao $programacao): bool
+    {
+        $codigoCliente = $this->normalizarTexto($programacao->codigo_cliente);
+        $cidadeDestino = $this->normalizarTexto($programacao->cidade_destino);
+        $cliente = $this->normalizarTexto($programacao->cliente);
+
+        return $codigoCliente === 'DIV'
+            || $cidadeDestino === 'DIVERSOS'
+            || $cliente === 'DIVERSOS';
     }
 
     public static function ajustarTempoViagemCaminhao(?int $tempoApiMinutos, $distanciaKm = null): ?int

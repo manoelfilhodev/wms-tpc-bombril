@@ -205,6 +205,7 @@
                     <h5 class="text-white mb-3">Mapeamento Operacional</h5>
                     <div class="d-flex flex-wrap gap-2 mb-3">
                         <span class="prog-chip"><i class="mdi mdi-key-outline"></i> Doc. Transporte → FO</span>
+                        <span class="prog-chip"><i class="mdi mdi-account-key-outline"></i> Cód. cliente → transit time</span>
                         <span class="prog-chip"><i class="mdi mdi-calendar-clock"></i> Agenda → entrega</span>
                         <span class="prog-chip"><i class="mdi mdi-map-marker-outline"></i> Cidade/UF → destino</span>
                         <span class="prog-chip"><i class="mdi mdi-timeline-clock-outline"></i> Marcos → demanda</span>
@@ -212,6 +213,8 @@
                     <p class="prog-muted mb-2">
                         A importação usa <strong class="text-white">updateOrCreate por FO</strong> em
                         <code>_tb_expedicao_programacoes</code>. Valores vazios não sobrescrevem campos existentes.
+                        As colunas <code>Cod Cliente</code>, <code>Codigo Cliente</code> ou <code>ID Cliente</code>
+                        alimentam o vínculo com a base de transit time.
                     </p>
                     <p class="prog-muted mb-0">
                         Para arquivos <code>.xlsb</code>, caso o ambiente não tenha parser compatível, salve a aba

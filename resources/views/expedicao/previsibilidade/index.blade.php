@@ -17,6 +17,18 @@
             return $sinal . floor(abs($minutos) / 60) . ':' . str_pad(abs($minutos) % 60, 2, '0', STR_PAD_LEFT);
         }
 
+        function transitTimeBoard($minutos)
+        {
+            if ($minutos === null) {
+                return '--';
+            }
+
+            $minutos = (int) $minutos;
+            $dias = (int) ceil(max(0, $minutos) / 1440);
+
+            return $dias . ' dia' . ($dias === 1 ? '' : 's');
+        }
+
         function dataHoraBoard($dataHora)
         {
             return $dataHora ? \Carbon\Carbon::parse($dataHora)->format('d/m H:i') : '--/-- --:--';
@@ -281,6 +293,18 @@
                 linear-gradient(135deg, rgba(3, 105, 161, .22), rgba(4, 14, 24, .92));
         }
 
+        .ops-finished-card.danger {
+            border-color: rgba(255, 59, 74, .34);
+            background:
+                linear-gradient(135deg, rgba(127, 29, 29, .28), rgba(4, 14, 24, .92));
+        }
+
+        .ops-finished-card.danger .ops-finished-head,
+        .ops-finished-card.danger .ops-finished-time,
+        .ops-finished-card.danger .ops-finished-head i {
+            color: #ffb4bd;
+        }
+
         .ops-finished-card.loaded .ops-finished-head,
         .ops-finished-card.loaded .ops-finished-time,
         .ops-finished-card.loaded .ops-finished-head i {
@@ -406,11 +430,11 @@
         }
 
         .ops-summary-grid.executive {
-            grid-template-columns: repeat(6, minmax(0, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
         }
 
         .ops-summary-grid.operational {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(5, minmax(0, 1fr));
         }
 
         .ops-summary-card {
@@ -437,6 +461,97 @@
 
         .ops-summary-card.danger {
             border-color: rgba(255, 56, 56, .38);
+        }
+
+        .ops-summary-card.featured {
+            position: relative;
+            overflow: hidden;
+            min-height: 104px;
+            padding: clamp(14px, 1.1vw, 18px);
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-rows: auto 1fr auto;
+            column-gap: 14px;
+            border-width: 1px;
+        }
+
+        .ops-summary-card.featured::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            opacity: .72;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 88% 20%, rgba(0, 174, 255, .16), transparent 34%),
+                linear-gradient(135deg, rgba(0, 174, 255, .08), transparent 55%);
+        }
+
+        .ops-summary-card.featured.ok {
+            border-color: rgba(57, 211, 83, .46);
+            background:
+                linear-gradient(135deg, rgba(20, 83, 45, .28), rgba(3, 10, 18, .96));
+        }
+
+        .ops-summary-card.featured.neutral {
+            border-color: rgba(0, 174, 255, .44);
+            background:
+                linear-gradient(135deg, rgba(3, 105, 161, .28), rgba(3, 10, 18, .96));
+        }
+
+        .ops-summary-card.featured.warning {
+            border-color: rgba(255, 193, 7, .50);
+            background:
+                linear-gradient(135deg, rgba(113, 63, 18, .34), rgba(3, 10, 18, .96));
+        }
+
+        .ops-summary-card.featured.danger {
+            border-color: rgba(255, 56, 56, .52);
+            background:
+                linear-gradient(135deg, rgba(127, 29, 29, .34), rgba(3, 10, 18, .96));
+        }
+
+        .ops-summary-card.featured .summary-head,
+        .ops-summary-card.featured .summary-value-row,
+        .ops-summary-card.featured .summary-detail {
+            position: relative;
+            z-index: 1;
+        }
+
+        .ops-summary-card.featured .summary-head {
+            grid-column: 1;
+        }
+
+        .ops-summary-card.featured .summary-value-row {
+            grid-column: 1;
+            align-self: center;
+            margin-top: 8px;
+        }
+
+        .ops-summary-card.featured .summary-detail {
+            grid-column: 1 / -1;
+            margin-top: 10px;
+        }
+
+        .ops-summary-card.featured .summary-icon {
+            grid-column: 2;
+            grid-row: 1 / 3;
+            align-self: center;
+            justify-self: end;
+            width: clamp(54px, 4vw, 76px);
+            height: clamp(54px, 4vw, 76px);
+            border-radius: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(34px, 2.7vw, 50px);
+            background: rgba(255, 255, 255, .06);
+            border: 1px solid rgba(255, 255, 255, .10);
+            box-shadow: inset 0 0 22px rgba(255, 255, 255, .04);
+            opacity: .96;
+        }
+
+        .ops-summary-card.featured .summary-value {
+            font-size: clamp(36px, 3vw, 58px);
         }
 
         .summary-head {
@@ -677,6 +792,54 @@
             color: #bde9ff;
             line-height: 1.2;
             overflow-wrap: anywhere;
+        }
+
+        .flight-presence-badge {
+            width: fit-content;
+            max-width: 100%;
+            margin-top: 8px;
+            padding: 5px 8px;
+            border-radius: 7px;
+            font-size: clamp(10px, .78vw, 13px);
+            font-weight: 1000;
+            line-height: 1.2;
+            text-transform: uppercase;
+            overflow-wrap: anywhere;
+        }
+
+        .flight-presence-badge strong,
+        .flight-presence-badge span {
+            display: block;
+        }
+
+        .flight-presence-badge span {
+            margin-top: 2px;
+            font-size: .92em;
+            opacity: .92;
+        }
+
+        .flight-presence-badge.present {
+            border: 1px solid rgba(57, 211, 83, .36);
+            background: rgba(57, 211, 83, .14);
+            color: #9ef3ac;
+        }
+
+        .flight-presence-badge.absent-late {
+            border: 1px solid rgba(255, 59, 74, .48);
+            background: rgba(255, 59, 74, .16);
+            color: #ffb4bd;
+        }
+
+        .flight-presence-badge.left {
+            border: 1px solid rgba(14, 165, 233, .36);
+            background: rgba(14, 165, 233, .14);
+            color: #bae6fd;
+        }
+
+        .flight-presence-badge.pending {
+            border: 1px solid rgba(148, 163, 184, .28);
+            background: rgba(148, 163, 184, .10);
+            color: #cbd5e1;
         }
 
         /* =========================
@@ -1554,15 +1717,21 @@
         @endphp
 
         <div class="ops-summary-grid executive mb-3">
-            @foreach ($cardsResumo->take(6) as $card)
-                <div class="ops-summary-card {{ $card['classe'] ?? 'neutral' }}">
+            @foreach ($cardsResumo->take(4) as $card)
+                <div class="ops-summary-card {{ $card['classe'] ?? 'neutral' }} {{ !empty($card['destaque']) ? 'featured' : '' }}">
                     <div class="summary-head">
                         <div class="summary-title">
                             {{ $card['titulo'] }}
                         </div>
 
-                        <i class="mdi {{ $card['icone'] }} summary-icon"></i>
+                        @empty($card['destaque'])
+                            <i class="mdi {{ $card['icone'] }} summary-icon"></i>
+                        @endempty
                     </div>
+
+                    @if (!empty($card['destaque']))
+                        <i class="mdi {{ $card['icone'] }} summary-icon"></i>
+                    @endif
 
                     <div class="summary-value-row">
                         <div class="summary-value">
@@ -1582,15 +1751,21 @@
         </div>
 
         <div class="ops-summary-grid operational">
-            @foreach ($cardsResumo->skip(6) as $card)
-                <div class="ops-summary-card {{ $card['classe'] ?? 'neutral' }}">
+            @foreach ($cardsResumo->skip(4) as $card)
+                <div class="ops-summary-card {{ $card['classe'] ?? 'neutral' }} {{ !empty($card['destaque']) ? 'featured' : '' }}">
                     <div class="summary-head">
                         <div class="summary-title">
                             {{ $card['titulo'] }}
                         </div>
 
-                        <i class="mdi {{ $card['icone'] }} summary-icon"></i>
+                        @empty($card['destaque'])
+                            <i class="mdi {{ $card['icone'] }} summary-icon"></i>
+                        @endempty
                     </div>
+
+                    @if (!empty($card['destaque']))
+                        <i class="mdi {{ $card['icone'] }} summary-icon"></i>
+                    @endif
 
                     <div class="summary-value-row">
                         <div class="summary-value">
@@ -1636,6 +1811,10 @@
 
                         $desvioSaida = (int) ($programacao->desvio_saida_min ?? 0);
 
+                        $erroTransitTime = $previsao?->status === 'ERRO'
+                            && str_contains((string) $previsao->observacoes, 'Transit time não encontrado');
+                        $presencaVeiculo = $programacao->presenca_veiculo ?? [];
+
                         if ($programacao->status_operacional === 'SEM_EXPLOSAO') {
                             $statusGeral = 'warning';
                             $statusTexto = 'Sem Explosão';
@@ -1643,9 +1822,9 @@
                             $statusDetalhe = 'Aguardando demanda';
                         } elseif ($programacao->status_operacional === 'SEM_ROTA') {
                             $statusGeral = 'warning';
-                            $statusTexto = 'Sem Rota';
-                            $statusIcon = 'mdi-map-marker-alert-outline';
-                            $statusDetalhe = 'Cadastrar rota';
+                            $statusTexto = $erroTransitTime ? 'Sem Transit' : 'Sem Rota';
+                            $statusIcon = $erroTransitTime ? 'mdi-calendar-question' : 'mdi-map-marker-alert-outline';
+                            $statusDetalhe = $erroTransitTime ? 'Cadastrar base' : 'Cadastrar rota';
                         } elseif ($programacao->status_operacional === 'SEM_CRITERIO') {
                             $statusGeral = 'warning';
                             $statusTexto = 'Sem Critério';
@@ -1705,8 +1884,38 @@
                         </div>
 
                         <div class="flight-mini flight-transit-time">
-                            Transit time {{ tempoBoard($previsao?->tempo_viagem_min) }}
+                            Transit time {{ transitTimeBoard($programacao->transit_time_base_min ?? null) }}
                         </div>
+
+                        @php
+                            $chegadaVeiculo = data_get($presencaVeiculo, 'entrada_em');
+                            $chegadaVeiculoTexto = $chegadaVeiculo
+                                ? \Carbon\Carbon::parse($chegadaVeiculo)->format('d/m H:i')
+                                : null;
+                            $placaVeiculo = data_get($presencaVeiculo, 'placa');
+                        @endphp
+
+                        @if (data_get($presencaVeiculo, 'na_planta'))
+                            <div class="flight-presence-badge present">
+                                <strong>Na planta</strong>
+                                <span>Chegada {{ $chegadaVeiculoTexto ?? 'em falta' }}{{ $placaVeiculo ? ' • ' . $placaVeiculo : '' }}</span>
+                            </div>
+                        @elseif (data_get($presencaVeiculo, 'atrasado_sem_presenca'))
+                            <div class="flight-presence-badge absent-late">
+                                <strong>Sem presença</strong>
+                                <span>Chegada em falta</span>
+                            </div>
+                        @elseif (data_get($presencaVeiculo, 'ja_saiu'))
+                            <div class="flight-presence-badge left">
+                                <strong>Saiu portaria</strong>
+                                <span>Chegada {{ $chegadaVeiculoTexto ?? 'em falta' }}{{ $placaVeiculo ? ' • ' . $placaVeiculo : '' }}</span>
+                            </div>
+                        @else
+                            <div class="flight-presence-badge pending">
+                                <strong>Fora da planta</strong>
+                                <span>Chegada em falta</span>
+                            </div>
+                        @endif
                     </div>
 
                     {{-- AGENDA --}}
