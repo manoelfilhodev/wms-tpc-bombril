@@ -431,15 +431,9 @@
                                                 <i class="mdi mdi-alert-triangle-outline fs-4"></i>
                                                 <div>
                                                     <strong>Esta ação não pode ser desfeita.</strong>
-                                                    <div>Ao confirmar, a DT e seus registros vinculados serão removidos.</div>
+                                                    <div>Ao confirmar, a DT e seus registros vinculados serão removidos de forma irreversível.</div>
                                                 </div>
                                             </div>
-                                            <label class="form-label small text-muted mb-1"
-                                                for="deletePassword{{ $d->id }}">
-                                                Digite a senha de um administrador para autorizar a exclusão
-                                            </label>
-                                            <input type="password" name="password" id="deletePassword{{ $d->id }}"
-                                                class="form-control" autocomplete="current-password" required>
                                         </div>
                                         <div class="modal-footer">
                                             <button type="button" class="btn btn-outline-secondary"

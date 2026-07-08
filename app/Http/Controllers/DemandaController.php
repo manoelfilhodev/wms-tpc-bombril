@@ -17,7 +17,6 @@ use App\Services\Expedicao\CapacidadeOperacionalService;
 use App\Services\DashboardService;
 use App\Services\SystemLogService;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 
@@ -266,17 +265,6 @@ class DemandaController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $request->validate([
-            'password' => 'required|string',
-        ], [
-            'password.required' => 'Informe a senha de um administrador para confirmar a exclusão da DT.',
-        ]);
-
-        $adminAutorizador = $this->adminAutorizadorPorSenha((string) $request->input('password'));
-        if (! $adminAutorizador) {
-            return back()->with('error', 'Senha de administrador inválida. A DT não foi excluída.');
-        }
-
         $demanda = Demanda::findOrFail($id);
         $oldValues = $demanda->only([
             'id',
@@ -304,7 +292,7 @@ class DemandaController extends Controller
             'new_values' => [
                 'excluida' => true,
                 'solicitada_por' => auth()->user()?->only(['id_user', 'nome', 'email']),
-                'autorizada_por_admin' => $adminAutorizador->only(['id_user', 'nome', 'email']),
+                'confirmacao' => 'usuario_notificado_acao_irreversivel',
             ],
         ]);
 
@@ -1078,23 +1066,6 @@ class DemandaController extends Controller
         }
 
         return Carbon::parse($demanda->separacao_iniciada_em)->gte(Demanda::DATA_OPERACIONAL_MINIMA);
-    }
-
-    private function adminAutorizadorPorSenha(string $password): ?User
-    {
-        return User::query()
-            ->whereNotNull('password')
-            ->where(function ($status) {
-                $status->where('status', 1)
-                    ->orWhere('status', 'ativo');
-            })
-            ->where(function ($admin) {
-                $admin->where('tipo', 'admin')
-                    ->orWhere('nivel', 'like', '%admin%')
-                    ->orWhereHas('roles.permissions', fn ($permission) => $permission->where('name', 'admin.access'));
-            })
-            ->get()
-            ->first(fn (User $user) => Hash::check($password, (string) $user->password));
     }
 
     public function dashboardOperacional()

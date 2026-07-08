@@ -22,21 +22,21 @@ class DemandaDeletePermissionTest extends TestCase
             ->get(route('demandas.operacional'))
             ->assertOk()
             ->assertSee("form-delete-demanda-{$demanda->id}", false)
-            ->assertSee('mdi-trash-can-outline', false);
+            ->assertSee('mdi-trash-can-outline', false)
+            ->assertSee('Esta ação não pode ser desfeita.')
+            ->assertSee('forma irreversível')
+            ->assertDontSee('Digite a senha de um administrador');
     }
 
-    public function test_operador_consegue_excluir_dt_com_senha_de_admin(): void
+    public function test_operador_consegue_excluir_dt_sem_senha(): void
     {
         $this->seed(RbacSeeder::class);
         $demanda = Demanda::create($this->demandaData('DT-DELETE-OPERADOR'));
-        $this->createUser('admin', 'Admin');
         $operador = $this->createUser('operador', 'Operador');
 
         $this->actingAs($operador)
             ->withSession(['tipo' => 'operador', 'nivel' => 'Operador'])
-            ->delete(route('demandas.destroy', $demanda->id), [
-                'password' => 'Secret123!',
-            ])
+            ->delete(route('demandas.destroy', $demanda->id))
             ->assertSessionHas('success');
 
         $this->assertDatabaseMissing('_tb_demanda', [
@@ -44,18 +44,15 @@ class DemandaDeletePermissionTest extends TestCase
         ]);
     }
 
-    public function test_gestor_consegue_excluir_dt_com_senha_de_admin(): void
+    public function test_gestor_consegue_excluir_dt_sem_senha(): void
     {
         $this->seed(RbacSeeder::class);
         $demanda = Demanda::create($this->demandaData('DT-DELETE-GESTOR'));
-        $this->createUser('admin', 'Admin');
         $gestor = $this->createUser('gestor', 'Gestor');
 
         $this->actingAs($gestor)
             ->withSession(['tipo' => 'gestor', 'nivel' => 'Gestor'])
-            ->delete(route('demandas.destroy', $demanda->id), [
-                'password' => 'Secret123!',
-            ])
+            ->delete(route('demandas.destroy', $demanda->id))
             ->assertSessionHas('success');
 
         $this->assertDatabaseMissing('_tb_demanda', [
@@ -63,41 +60,19 @@ class DemandaDeletePermissionTest extends TestCase
         ]);
     }
 
-    public function test_senha_incorreta_nao_exclui_dt(): void
+    public function test_admin_consegue_excluir_dt_sem_senha(): void
     {
         $this->seed(RbacSeeder::class);
-        $demanda = Demanda::create($this->demandaData('DT-DELETE-SENHA'));
+        $demanda = Demanda::create($this->demandaData('DT-DELETE-SEM-SENHA'));
         $admin = $this->createUser('admin', 'Admin');
 
         $this->actingAs($admin)
             ->withSession(['tipo' => 'admin', 'nivel' => 'Admin'])
-            ->delete(route('demandas.destroy', $demanda->id), [
-                'password' => 'SenhaErrada!',
-            ])
-            ->assertSessionHas('error', 'Senha de administrador inválida. A DT não foi excluída.');
+            ->delete(route('demandas.destroy', $demanda->id))
+            ->assertSessionHas('success');
 
-        $this->assertDatabaseHas('_tb_demanda', [
+        $this->assertDatabaseMissing('_tb_demanda', [
             'id' => $demanda->id,
-            'fo' => 'DT-DELETE-SENHA',
-        ]);
-    }
-
-    public function test_usuario_com_senha_correta_mas_sem_perfil_admin_nao_exclui_dt(): void
-    {
-        $this->seed(RbacSeeder::class);
-        $demanda = Demanda::create($this->demandaData('DT-DELETE-SEM-SENHA'));
-        $gestor = $this->createUser('gestor', 'Gestor');
-
-        $this->actingAs($gestor)
-            ->withSession(['tipo' => 'gestor', 'nivel' => 'Gestor'])
-            ->delete(route('demandas.destroy', $demanda->id), [
-                'password' => 'Secret123!',
-            ])
-            ->assertSessionHas('error', 'Senha de administrador inválida. A DT não foi excluída.');
-
-        $this->assertDatabaseHas('_tb_demanda', [
-            'id' => $demanda->id,
-            'fo' => 'DT-DELETE-SEM-SENHA',
         ]);
     }
 
