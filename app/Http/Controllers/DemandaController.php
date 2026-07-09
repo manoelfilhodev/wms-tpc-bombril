@@ -295,6 +295,7 @@ class DemandaController extends Controller
                 'confirmacao' => 'usuario_notificado_acao_irreversivel',
             ],
         ]);
+        $this->registrarExclusaoDemandaNoLogLegado($oldValues);
 
         return back()->with('success', "DT {$oldValues['fo']} excluída com sucesso.");
     }
@@ -1066,6 +1067,30 @@ class DemandaController extends Controller
         }
 
         return Carbon::parse($demanda->separacao_iniciada_em)->gte(Demanda::DATA_OPERACIONAL_MINIMA);
+    }
+
+    private function registrarExclusaoDemandaNoLogLegado(array $oldValues): void
+    {
+        $user = auth()->user();
+        $unidadeId = $user?->unidade_id ?? session('unidade');
+
+        if (! $user || ! $unidadeId || ! Schema::hasTable('_tb_user_logs')) {
+            return;
+        }
+
+        DB::table('_tb_user_logs')->insert([
+            'usuario_id' => $user->getAuthIdentifier(),
+            'unidade_id' => $unidadeId,
+            'acao' => 'demanda_excluida',
+            'dados' => json_encode([
+                'mensagem' => "DT {$oldValues['fo']} excluída.",
+                'demanda' => $oldValues,
+                'confirmacao' => 'usuario_notificado_acao_irreversivel',
+            ], JSON_UNESCAPED_UNICODE),
+            'ip_address' => request()->ip(),
+            'navegador' => request()->userAgent(),
+            'created_at' => now(),
+        ]);
     }
 
     public function dashboardOperacional()

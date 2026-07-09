@@ -56,6 +56,14 @@ class DemandaDeletePermissionTest extends TestCase
         $this->assertTrue($newValues['excluida']);
         $this->assertSame($operador->id_user, $newValues['solicitada_por']['id_user']);
         $this->assertSame('usuario_notificado_acao_irreversivel', $newValues['confirmacao']);
+
+        $logLegado = DB::table('_tb_user_logs')
+            ->where('usuario_id', $operador->id_user)
+            ->where('acao', 'demanda_excluida')
+            ->where('dados', 'like', '%DT-DELETE-OPERADOR%')
+            ->first();
+
+        $this->assertNotNull($logLegado);
     }
 
     public function test_gestor_consegue_excluir_dt_sem_senha(): void
