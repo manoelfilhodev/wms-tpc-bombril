@@ -42,6 +42,20 @@ class DemandaDeletePermissionTest extends TestCase
         $this->assertDatabaseMissing('_tb_demanda', [
             'id' => $demanda->id,
         ]);
+
+        $log = DB::table('_tb_system_logs')
+            ->where('module', 'separacao')
+            ->where('action', 'demanda_excluida')
+            ->where('entity_type', 'demanda')
+            ->where('entity_id', (string) $demanda->id)
+            ->first();
+
+        $this->assertNotNull($log);
+
+        $newValues = json_decode($log->new_values, true);
+        $this->assertTrue($newValues['excluida']);
+        $this->assertSame($operador->id_user, $newValues['solicitada_por']['id_user']);
+        $this->assertSame('usuario_notificado_acao_irreversivel', $newValues['confirmacao']);
     }
 
     public function test_gestor_consegue_excluir_dt_sem_senha(): void
